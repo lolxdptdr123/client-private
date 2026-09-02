@@ -1,0 +1,41 @@
+# Visual Studio / MSBuild
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+ipch/
+
+# Build outputs
+x64/
+**/x64/
+**/Win32/
+**/Debug/
+**/Release/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.iobj
+*.ipdb
+*.recipe
+*.tlog
+*.log
+*.lastbuildstate
+*.idb
+
+# Precompiled headers
+**/*.pch
+
+# Local configs / secrets
+.env
+.env.*
+*.pfx
+*.snk
+credentials.json
+*.wbin
