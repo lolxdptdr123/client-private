@@ -10,4 +10,5 @@
 namespace Overlay
 {
     inline bool isOpen = false;
+    inline HWND gameHwnd = nullptr;
 }

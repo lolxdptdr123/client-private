@@ -126,7 +126,7 @@ static void ApplyTheme() {
 // ====================================================================
 static bool AnyListening() {
     return MenuBinds::aa_listening || MenuBinds::lc_listening
-        || MenuBinds::vel_listening         || MenuBinds::al_listening
+        || MenuBinds::vel_listening || MenuBinds::al_listening
         || MenuBinds::ch_listening
         || MenuBinds::esp_listening
         || MenuBinds::itemesp_listening
@@ -528,7 +528,6 @@ void ClientMenu::RenderCombatTab()
     ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.f, 0.f, 0.f, 0.f });
     ImGui::BeginChild("##col_left", { colW, 0.f }, false);
 
-    // ── Aim Assist card ───────────────────────────────────────────────────────
     {
         AimAssist* aa = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
@@ -543,32 +542,25 @@ void ClientMenu::RenderCombatTab()
                 const char* modes[] = { "Blatant", "Legit" };
                 PhantomCombo("Mode", "##aa_mode", AimAssistSettings::currentMode, modes, 2);
             }
-
             SectionHeader("Speed");
             PhantomSliderFloat("Speed", "##aa_spd", AimAssistSettings::speed, 1.f, 10.f, "%.1f");
-
             SectionHeader("FOV");
             PhantomRangeSliderFloat("##aa_fov", AimAssistSettings::fovMin,
                 AimAssistSettings::fovMax, 0.f, 360.f);
-
             if (AimAssistSettings::priority != 2) {
                 SectionHeader("Distance");
                 PhantomSliderFloat("Min", "##aa_dmin", AimAssistSettings::distanceMin, 0.f, AimAssistSettings::distanceMax, "%.1f");
                 PhantomSliderFloat("Max", "##aa_dmax", AimAssistSettings::distanceMax, AimAssistSettings::distanceMin, 6.f, "%.1f");
             }
-
             SectionHeader("Priority");
             {
                 const char* sorts[] = { "Distance", "FOV", "HurtTime" };
                 PhantomCombo("Priority", "##aa_prio", AimAssistSettings::priority, sorts, 3);
             }
-
             SectionHeader("Targets");
             PhantomToggleRow("##aa_pl", "Players", AimAssistSettings::targetPlayers);
             PhantomToggleRow("##aa_inv", "Invisible", AimAssistSettings::allowInvisible);
             PhantomToggleRow("##aa_nk", "Naked", AimAssistSettings::allowNaked);
-            PhantomToggleRow("##aa_en", "Enemies only", AimAssistSettings::targetEnemiesOnly);
-
             SectionHeader("Conditions");
             PhantomToggleRow("##aa_clk", "Require click", AimAssistSettings::requireClick);
             PhantomToggleRow("##aa_wpn", "Weapons only", AimAssistSettings::weaponsOnly);
@@ -579,21 +571,17 @@ void ClientMenu::RenderCombatTab()
                 ImGui::SameLine(ImGui::GetContentRegionAvail().x - 88.f);
                 DrawBindButton("aa_keepbind", AimAssistSettings::keepOnTargetKeybind, AimAssistSettings::keepBindListening);
             }
-
             SectionHeader("Multipoint");
             PhantomSliderInt("Multipoint", "##aa_mp", AimAssistSettings::multipoint, 0, 100);
-
             SectionHeader("Bind");
             DrawBindButton("aa_bind", MenuBinds::aa_bind, MenuBinds::aa_listening);
             ImGui::Spacing();
         }
     }
 
-    // ── Throw card ────────────────────────────────────────────────
     {
         bool open = SnapCard("Throw", "Throws pots, soup, pearls and debuffs.",
             &ThrowSettings::enabled, nullptr, nullptr);
-
         if (open) {
             SectionHeader("Health");
             PhantomToggleRow("##th_pot", "Enable Health", ThrowSettings::potEnabled);
@@ -603,7 +591,6 @@ void ClientMenu::RenderCombatTab()
             ImGui::TextColored(TEXT_DIM, "Bind");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 88.f);
             DrawBindButton("th_pot_bind", ThrowSettings::potBind, ThrowSettings::potListening);
-
             SectionHeader("Soup");
             PhantomToggleRow("##th_soup", "Enable Soup", ThrowSettings::soupEnabled);
             PhantomSliderFloat("Speed", "##th_soup_spd", ThrowSettings::soupSpeed, 0.f, 10.f, "%.1f");
@@ -613,7 +600,6 @@ void ClientMenu::RenderCombatTab()
             ImGui::TextColored(TEXT_DIM, "Bind");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 88.f);
             DrawBindButton("th_soup_bind", ThrowSettings::soupBind, ThrowSettings::soupListening);
-
             SectionHeader("Debuff");
             PhantomToggleRow("##th_deb", "Enable Debuff", ThrowSettings::debuffEnabled);
             PhantomSliderFloat("Speed", "##th_deb_spd", ThrowSettings::debuffSpeed, 0.f, 10.f, "%.1f");
@@ -621,7 +607,6 @@ void ClientMenu::RenderCombatTab()
             ImGui::TextColored(TEXT_DIM, "Bind");
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 88.f);
             DrawBindButton("th_deb_bind", ThrowSettings::debuffBind, ThrowSettings::debuffListening);
-
             SectionHeader("Pearl");
             PhantomToggleRow("##th_pearl", "Enable Pearl", ThrowSettings::pearlEnabled);
             PhantomSliderFloat("Speed", "##th_pearl_spd", ThrowSettings::pearlSpeed, 0.f, 10.f, "%.1f");
@@ -632,37 +617,29 @@ void ClientMenu::RenderCombatTab()
         }
     }
 
-    // ── Piercing card ─────────────────────────────────────────────
     {
         Piercing* pr = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((pr = dynamic_cast<Piercing*>(m))) break;
-
         bool open = SnapCard("Piercing", "Allows hitting entities through obstructions.",
             pr ? &pr->enabled : nullptr, &MenuBinds::prc_bind, &MenuBinds::prc_listening);
-
         if (open && pr) {
             SectionHeader("Conditions");
             PhantomToggleRow("##pr_wpn", "Weapons only", PiercingSettings::weaponsOnly);
             PhantomToggleRow("##pr_blk", "Through blocks", PiercingSettings::throughBlock);
             PhantomToggleRow("##pr_en", "Enemies only", PiercingSettings::targetEnemiesOnly);
-            ImGui::TextColored(TEXT_DIM, "Ignore les amis. Enemies only ne vise que la liste Enemies.");
-
             SectionHeader("Bind");
             DrawBindButton("prc_bind", MenuBinds::prc_bind, MenuBinds::prc_listening);
             ImGui::Spacing();
         }
     }
 
-    // ── KeepSprint card ───────────────────────────────────────────
     {
         KeepSprint* ks = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((ks = dynamic_cast<KeepSprint*>(m))) break;
-
         bool open = SnapCard("KeepSprint", "Resets your sprint state to deal more knockback.",
             ks ? &ks->enabled : nullptr, &MenuBinds::ks_bind, &MenuBinds::ks_listening);
-
         if (open && ks) {
             SectionHeader("Mode");
             {
@@ -675,22 +652,18 @@ void ClientMenu::RenderCombatTab()
             PhantomSliderInt("Chance (%)", "##ks_ch", KeepSprintSettings::chance, 0, 100);
             PhantomToggleRow("##ks_wpn", "Weapons only", KeepSprintSettings::weaponsOnly);
             PhantomToggleRow("##ks_beh", "Only on behind", KeepSprintSettings::onlyOnBehind);
-
             SectionHeader("Bind");
             DrawBindButton("ks_bind", MenuBinds::ks_bind, MenuBinds::ks_listening);
             ImGui::Spacing();
         }
     }
 
-    // ── Criticals card ────────────────────────────────────────────
     {
         Criticals* cr = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((cr = dynamic_cast<Criticals*>(m))) break;
-
         bool open = SnapCard("Criticals", "Increases chance of landing critical hits.",
             cr ? &cr->enabled : nullptr, &MenuBinds::cr_bind, &MenuBinds::cr_listening);
-
         if (open && cr) {
             SectionHeader("Mode");
             {
@@ -703,72 +676,56 @@ void ClientMenu::RenderCombatTab()
                 PhantomSliderFloat("Timer speed", "##cr_ts", CriticalsSettings::timerSpeed, 0.1f, 0.9f, "%.2f");
             else
                 PhantomSliderInt("Max queue (ms)", "##cr_q", CriticalsSettings::maxQueueTime, 200, 1000);
-
             SectionHeader("Bind");
             DrawBindButton("cr_bind", MenuBinds::cr_bind, MenuBinds::cr_listening);
             ImGui::Spacing();
         }
     }
 
-    ImGui::EndChild();       // ##col_left
-    ImGui::PopStyleColor();  // ChildBg transparent
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
     ImGui::SameLine(0.f, 10.f);
 
-    // ══════════════════════════════════════════════════════════════════════
-    // COLONNE DROITE : 
-    // ══════════════════════════════════════════════════════════════════════
     ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.f, 0.f, 0.f, 0.f });
     ImGui::BeginChild("##col_right", { colW, 0.f }, false);
 
-    // ── Clicker card ───────────────────────────────────────────────────────
     {
         bool open = SnapCard("Auto Clicker", "Clicks for you when holding down left-click.",
             &Clicker::enabled, &MenuBinds::lc_bind, &MenuBinds::lc_listening);
-
         if (open) {
             SectionHeader("Mode");
             {
                 const char* modes[] = { "Blatant", "Butterfly", "Jitter" };
                 PhantomCombo("Mode", "##lc_mode", Clicker::mode, modes, 3);
             }
-
             SectionHeader("CPS");
             PhantomSliderInt("Clics par seconde", "##lc_cps", Clicker::cps, 5, 25);
             ImGui::TextColored(TEXT_DIM, "~%.1f ms entre clics", 1000.f / (float)Clicker::cps);
             ImGui::Spacing();
-
             if (Clicker::mode == 1 || Clicker::mode == 2) {
                 SectionHeader("Randomisation");
                 PhantomToggleRow("##lc_exh", "Exhaust", Clicker::exhaust);
-                ImGui::TextColored(TEXT_DIM,
-                    Clicker::mode == 2
-                        ? "Delai gaussien + drops aleatoires (Jitter)"
-                        : "Delai gaussien + drops aleatoires");
-                ImGui::Spacing();
             }
-
             SectionHeader("Conditions");
             PhantomToggleRow("##lc_req", "Require Click (LMB)", Clicker::requireClick);
             PhantomToggleRow("##lc_wpn", "Weapons Only", Clicker::weaponsOnly);
+            SectionHeader("Bind");
+            DrawBindButton("lc_bind", MenuBinds::lc_bind, MenuBinds::lc_listening);
         }
     }
 
-    // ── Velocity card ─────────────────────────────────────────────
     {
         Velocity* vel = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((vel = dynamic_cast<Velocity*>(m))) break;
-
         bool open = SnapCard("Velocity", "Reduces the amount of knockback you take.",
             vel ? &vel->enabled : nullptr, &MenuBinds::vel_bind, &MenuBinds::vel_listening);
-
         if (open && vel) {
             SectionHeader("Mode");
             {
                 const char* modes[] = { "Blatant", "Reverse", "Jump", "Reduce" };
                 PhantomCombo("Mode", "##vel_mode", VelocitySettings::mode, modes, 4);
             }
-
             if (VelocitySettings::mode == 0) {
                 SectionHeader("Knockback");
                 PhantomSliderFloat("Horizontal (%)", "##vel_h", VelocitySettings::horizontal, 0.f, 100.f, "%.0f%%");
@@ -784,29 +741,24 @@ void ClientMenu::RenderCombatTab()
                 PhantomSliderFloat("Strength (%)", "##vel_red", VelocitySettings::reduceH, 0.f, 100.f, "%.0f%%");
                 PhantomToggleRow("##vel_agc", "AGC Bypass", VelocitySettings::agcBypass);
             }
-
             SectionHeader("Conditions");
             PhantomSliderInt("Chance (%)", "##vel_chance", VelocitySettings::chance, 0, 100);
             PhantomToggleRow("##vel_wpn", "Weapons only", VelocitySettings::weaponsOnly);
             PhantomToggleRow("##vel_fwd", "Only when moving forward", VelocitySettings::onlyWhenMovingForward);
             PhantomToggleRow("##vel_look", "Only looking at player", VelocitySettings::onlyLookingAtPlayer);
             PhantomToggleRow("##vel_lmb", "Only mouse pressed", VelocitySettings::onlyMousePressed);
-
             SectionHeader("Bind");
             DrawBindButton("vel_bind", MenuBinds::vel_bind, MenuBinds::vel_listening);
             ImGui::Spacing();
         }
     }
 
-    // ── AutoRefill card ───────────────────────────────────────────
     {
         AutoRefill* ar = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((ar = dynamic_cast<AutoRefill*>(m))) break;
-
         bool open = SnapCard("AutoRefill", "Refills potions or soup from your inventory.",
             ar ? &ar->enabled : nullptr, &MenuBinds::ar_bind, &MenuBinds::ar_listening);
-
         if (open && ar) {
             SectionHeader("Configuration");
             static const char* arModes[] = { "Blatant", "Legit", "Semi Blatant" };
@@ -814,7 +766,6 @@ void ClientMenu::RenderCombatTab()
             static const char* arItems[] = { "Potion", "Soup", "Both" };
             PhantomCombo("Item", "##ar_item", AutoRefillSettings::itemMode, arItems, 3);
             PhantomSliderInt("Speed", "##ar_speed", AutoRefillSettings::speed, 0, 10);
-            ImGui::Spacing();
             PhantomToggleRow("##ar_rand", "Random slots", AutoRefillSettings::randomMode);
             if (AutoRefillSettings::mode == 1) {
                 PhantomToggleRow("##ar_dyn", "Dynamic speed", AutoRefillSettings::dynamicSpeed);
@@ -826,15 +777,12 @@ void ClientMenu::RenderCombatTab()
         }
     }
 
-    // ── AutoRod card ──────────────────────────────────────────────
     {
         AutoRod* rod = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((rod = dynamic_cast<AutoRod*>(m))) break;
-
         bool open = SnapCard("AutoRod", "Automatically rods players out of melee range.",
             rod ? &rod->enabled : nullptr, &MenuBinds::rod_bind, &MenuBinds::rod_listening);
-
         if (open && rod) {
             SectionHeader("Range");
             PhantomSliderFloat("FOV", "##rod_fov", AutoRodSettings::fov, 20.f, 180.f, "%.0f");
@@ -868,15 +816,12 @@ void ClientMenu::RenderCombatTab()
         }
     }
 
-    // ── AntiBot card ──────────────────────────────────────────────
     {
         AntiBot* ab = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((ab = dynamic_cast<AntiBot*>(m))) break;
-
         bool open = SnapCard("AntiBot", "Filters bots from targeting and visuals.",
             ab ? &ab->enabled : nullptr, &MenuBinds::ab_bind, &MenuBinds::ab_listening);
-
         if (open && ab) {
             SectionHeader("Checks");
             PhantomSliderInt("Min ticks", "##ab_tk", AntiBotSettings::minTicks, 0, 100);
@@ -884,16 +829,14 @@ void ClientMenu::RenderCombatTab()
             PhantomToggleRow("##ab_pkt", "Check movement", AntiBotSettings::checkPackets);
             if (AntiBotSettings::checkPackets)
                 PhantomSliderInt("Packet grace", "##ab_pg", AntiBotSettings::packetGrace, 10, 120);
-            ImGui::TextColored(TEXT_DIM, "Filtre les bots (tab, ticks, HP, mouvement).");
-
             SectionHeader("Bind");
             DrawBindButton("ab_bind", MenuBinds::ab_bind, MenuBinds::ab_listening);
             ImGui::Spacing();
         }
     }
 
-    ImGui::EndChild();       // ##col_right
-    ImGui::PopStyleColor();  // ChildBg transparent
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
 }
 
 // ------------------------------------------------------------------
@@ -2528,8 +2471,7 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
 
     // Toggle menu — uniquement si Lunar est au premier plan
     if (!AnyListening() && bindGracePassed) {
-        HWND lunarHwnd = FindLunarWindow();
-        bool lunarFocused = lunarHwnd && (GetForegroundWindow() == lunarHwnd);
+        bool lunarFocused = IsGameWindowFocused();
 
         if (lunarFocused) {
             bool now = MenuBinds::open_bind ? (GetAsyncKeyState(MenuBinds::open_bind) & 0x8000) != 0 : false;
@@ -2648,7 +2590,8 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
     case 3:
         twoCol([&] {
             RenderFastPlaceTab();
-            RenderTickLockerTab();
+            if (g_GameVersion == LUNAR_1_8_9)
+                RenderTickLockerTab();
         }, [&] { RenderFastBreakTab(); });
         break;
     case 4:

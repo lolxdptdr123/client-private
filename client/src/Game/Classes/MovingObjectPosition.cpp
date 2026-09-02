@@ -36,6 +36,18 @@ static bool IsAimingType(JNIEnv* env, jobject mop,
     return env->IsSameObject(typeOfHitObj, enumVal);
 }
 
+static int TypeOfHitInt(JNIEnv* env, jobject mop)
+{
+    jclass mopClass = env->GetObjectClass(mop);
+    if (!mopClass) return -1;
+    std::string typeOfHit = Mapper::Get("typeOfHit");
+    jfieldID f = env->GetFieldID(mopClass, typeOfHit.empty() ? "typeOfHit" : typeOfHit.c_str(), "I");
+    env->DeleteLocalRef(mopClass);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return -1; }
+    if (!f) return -1;
+    return env->GetIntField(mop, f);
+}
+
 bool MovingObjectPosition::IsAimingBlock(JNIEnv* env)
 {
     if (this == NULL || env == NULL) return false;
@@ -43,9 +55,11 @@ bool MovingObjectPosition::IsAimingBlock(JNIEnv* env)
     std::string mopTypeSig = Mapper::Get("net/minecraft/util/MovingObjectPosition$MovingObjectType", 2);
     std::string typeOfHit = Mapper::Get("typeOfHit");
     std::string blockName = Mapper::Get("BLOCK");
-    return IsAimingType(env, (jobject)this,
+    if (IsAimingType(env, (jobject)this,
         mopName.c_str(), mopTypeSig.c_str(),
-        typeOfHit.c_str(), blockName.c_str());
+        typeOfHit.c_str(), blockName.c_str()))
+        return true;
+    return TypeOfHitInt(env, (jobject)this) == 1;
 }
 
 bool MovingObjectPosition::IsAimingEntity(JNIEnv* env)
@@ -55,7 +69,9 @@ bool MovingObjectPosition::IsAimingEntity(JNIEnv* env)
     std::string mopTypeSig = Mapper::Get("net/minecraft/util/MovingObjectPosition$MovingObjectType", 2);
     std::string typeOfHit = Mapper::Get("typeOfHit");
     std::string entityName = Mapper::Get("ENTITY");
-    return IsAimingType(env, (jobject)this,
+    if (IsAimingType(env, (jobject)this,
         mopName.c_str(), mopTypeSig.c_str(),
-        typeOfHit.c_str(), entityName.c_str());
+        typeOfHit.c_str(), entityName.c_str()))
+        return true;
+    return TypeOfHitInt(env, (jobject)this) == 2;
 }

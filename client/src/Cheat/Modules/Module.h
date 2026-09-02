@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <thread>
+#include <atomic>
 #include <jni.h>
 
 // Flag mis à jour par les threads modules : true si le joueur est en jeu

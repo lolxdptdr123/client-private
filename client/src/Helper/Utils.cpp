@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Utils.h"
+#include "../Cheat/Modules/Misc/Overlay.h"
 
 #include <gl/GL.h>
 #include <random>
@@ -106,10 +107,68 @@ void sendClick(HWND window, int delay, bool isRight)
     Sleep(delay);
 }
 
+static BOOL CALLBACK EnumGameWindowProc(HWND hwnd, LPARAM lParam)
+{
+    if (!IsWindowVisible(hwnd))
+        return TRUE;
+
+    wchar_t title[256]{};
+    GetWindowTextW(hwnd, title, 256);
+    wchar_t cls[64]{};
+    GetClassNameW(hwnd, cls, 64);
+
+    const bool lunarTitle = wcsstr(title, L"Lunar") != nullptr;
+    const bool glClass = _wcsicmp(cls, L"LWJGL") == 0 || _wcsicmp(cls, L"GLFW30") == 0;
+    if (!lunarTitle && !glClass)
+        return TRUE;
+
+    *reinterpret_cast<HWND*>(lParam) = hwnd;
+    return FALSE;
+}
+
+static bool SameWindowTree(HWND a, HWND b)
+{
+    if (!a || !b)
+        return false;
+    if (a == b)
+        return true;
+    HWND ra = GetAncestor(a, GA_ROOT);
+    HWND rb = GetAncestor(b, GA_ROOT);
+    return ra && rb && ra == rb;
+}
+
 HWND FindLunarWindow()
 {
+    if (Overlay::gameHwnd && IsWindow(Overlay::gameHwnd))
+        return Overlay::gameHwnd;
+
     HWND h = FindWindowW(nullptr, L"Lunar Client 1.8.9");
     if (!h) h = FindWindowW(nullptr, L"Lunar Client 1.7.10");
+    if (!h) EnumWindows(EnumGameWindowProc, reinterpret_cast<LPARAM>(&h));
     if (!h) h = FindWindowW(L"LWJGL", nullptr);
+    if (!h) h = FindWindowW(L"GLFW30", nullptr);
     return h;
+}
+
+bool IsGameWindowFocused()
+{
+    HWND fg = GetForegroundWindow();
+    if (!fg)
+        return false;
+
+    if (SameWindowTree(fg, Overlay::gameHwnd))
+        return true;
+
+    HWND lunar = FindLunarWindow();
+    if (SameWindowTree(fg, lunar))
+        return true;
+
+    if (Overlay::gameHwnd && IsWindow(Overlay::gameHwnd)) {
+        DWORD pidFg = 0, pidGame = 0;
+        GetWindowThreadProcessId(fg, &pidFg);
+        GetWindowThreadProcessId(Overlay::gameHwnd, &pidGame);
+        if (pidFg && pidFg == pidGame)
+            return true;
+    }
+    return false;
 }

@@ -4,7 +4,6 @@
 #include "SwordCheck.h"
 #include "clicker.h"
 #include "../Misc/Friends.h"
-#include "../Misc/Enemies.h"
 #include "AntiBot.h"
 #include "../../../Game/Classes/Player.h"
 #include "../../../Game/Classes/Minecraft.h"
@@ -15,6 +14,7 @@
 #include "../../../Game/Classes/InventoryPlayer.h"
 #include "../../../Game/Mapper.h"
 #include "../../Hack.h"
+#include "../Misc/Overlay.h"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -182,8 +182,7 @@ namespace {
         if (AimAssistSettings::keepOnTarget && g_lastTarget.entityId != -1) {
             Player* current = FindById(players, g_lastTarget.entityId, env);
             if (current && current->GetEntityId(env) != localId) {
-                if (!FriendsSettings::IsFriend(env, current) && !AntiBot_IsBot(env, (jobject)current)
-                    && (!AimAssistSettings::targetEnemiesOnly || EnemiesSettings::IsEnemy(env, current))) {
+                if (!FriendsSettings::IsFriend(env, current) && !AntiBot_IsBot(env, (jobject)current)) {
                     double distance = Dist2D(local, current, env);
                     if (distance > 6.0) distance = 6.0;
                     float rotations[2]{ 0.f, 0.f };
@@ -201,8 +200,8 @@ namespace {
             if (player->GetEntityId(env) == localId) continue;
 
             if (FriendsSettings::IsFriend(env, player)) continue;
-            if (AimAssistSettings::targetEnemiesOnly && !EnemiesSettings::IsEnemy(env, player)) continue;
             if (AntiBot_IsBot(env, (jobject)player)) continue;
+            if (player->IsDead(env)) continue;
             if (!AimAssistSettings::allowInvisible && player->IsInvisible(env)) continue;
             if (!AimAssistSettings::allowNaked && IsNaked(player, env)) continue;
 
@@ -227,8 +226,21 @@ namespace {
 }
 
 void AimAssist::Run(JNIEnv* env) {
+    if (!env) return;
+
+    if (env->PushLocalFrame(256) != JNI_OK)
+        return;
+
+    auto pop = [env]() { env->PopLocalFrame(nullptr); };
+
     if (!enabled) {
         g_lastTarget = {};
+        pop();
+        return;
+    }
+
+    if (Overlay::isOpen) {
+        pop();
         return;
     }
 
@@ -247,8 +259,9 @@ void AimAssist::Run(JNIEnv* env) {
     jobject worldObj = Minecraft::GetTheWorld(env);
     jobject gsObj = Minecraft::GetGameSettings(env);
     jobject mopObj = Minecraft::GetObjectMouseOver(env);
-    if (!lpObj || !worldObj || !gsObj) {
+    if (!lpObj || !worldObj) {
         UpdateRandomSpeed(false);
+        pop();
         return;
     }
 
@@ -267,23 +280,33 @@ void AimAssist::Run(JNIEnv* env) {
         if (g_lastTarget.entityId != -1)
             g_lastTarget = {};
         UpdateRandomSpeed(false);
+        pop();
         return;
     }
 
     const Target target = GetTarget(world, local, env);
     if (target.entityId == -1) {
         UpdateRandomSpeed(false);
+        pop();
         return;
     }
 
-    float deltaYaw = target.yaw * (g_randomSpeed / 50.f * sqrt(g_lastTarget.distance));
+    const double distForSpeed = (g_lastTarget.entityId == target.entityId && g_lastTarget.distance > 0.05)
+        ? g_lastTarget.distance
+        : (target.distance > 0.05 ? target.distance : 1.0);
+    float deltaYaw = target.yaw * (g_randomSpeed / 50.f * (float)sqrt(distForSpeed));
     deltaYaw = (target.yaw < 0.f ? -1.f : 1.f) * std::clamp(abs(deltaYaw), 0.f, abs(target.yaw));
 
-    const float var3 = gs->GetMouseSensitivity(env) * 0.6f + 0.2f;
-    const float var4 = var3 * var3 * var3 * 8.f;
+    float var4 = 0.15f * 8.f;
+    if (gs) {
+        const float var3 = gs->GetMouseSensitivity(env) * 0.6f + 0.2f;
+        var4 = var3 * var3 * var3 * 8.f;
+        if (var4 < 1e-4f) var4 = 1e-4f;
+    }
 
     const int deltaX = static_cast<int>(round(deltaYaw / var4));
-    deltaYaw = deltaX * var4;
+    if (deltaX != 0)
+        deltaYaw = deltaX * var4;
 
     float deltaPitch = 0.f;
     if (abs(deltaYaw) >= 0.f) {
@@ -303,10 +326,16 @@ void AimAssist::Run(JNIEnv* env) {
         }
 
         const int deltaY = static_cast<int>(round(deltaPitch / var4));
-        deltaPitch = deltaY * var4;
+        if (deltaY != 0)
+            deltaPitch = deltaY * var4;
     }
 
     local->SetAngles(deltaYaw, deltaPitch, env);
     g_lastTarget = target;
     UpdateRandomSpeed(true);
+    pop();
+}
+
+void AimAssist::OnRender(JNIEnv* env) {
+    Run(env);
 }

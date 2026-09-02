@@ -17,6 +17,7 @@
 #include "../../../Game/Field.h"
 #include "../../../Game/Method.h"
 #include "../../../Cheat/Hack.h"
+#include "../../../Helper/Utils.h"
 
 #include <thread>
 #include <atomic>
@@ -188,19 +189,6 @@ static void LoadHotbarKeys() {
     s_hotbarLoaded = true;
 }
 
-static HWND FindLunarWindow() {
-    HWND h = FindWindowW(nullptr, L"Lunar Client 1.8.9");
-    if (!h) h = FindWindowW(nullptr, L"Lunar Client 1.7.10");
-    if (!h) h = FindWindowW(L"LWJGL", nullptr);
-    return h;
-}
-
-static bool IsLunarFocused() {
-    HWND lunar = FindLunarWindow();
-    if (!lunar) return false;
-    return GetForegroundWindow() == lunar;
-}
-
 static void PressHotbarKey(int slot) {
     if (!s_hotbarLoaded) LoadHotbarKeys();
     if (slot < 0 || slot > 8) return;
@@ -238,7 +226,7 @@ static void PressHotbarKey(int slot) {
 }
 
 void Scroll::ScrollToSlot(int slot) {
-    if (!IsLunarFocused()) return;
+    if (!IsGameWindowFocused()) return;
     if (slot < 0 || slot > 8) return;
     PressHotbarKey(slot);
 }
@@ -283,7 +271,7 @@ static void ScrollThreadProc() {
 void Scroll::Trigger(JNIEnv* env) {
     if (!enabled) return;
     if (Overlay::isOpen) return;
-    if (!IsLunarFocused()) return;
+    if (!IsGameWindowFocused()) return;
     if (!s_hotbarLoaded) LoadHotbarKeys();
 
     // Vérifie qu'au moins un item est activé

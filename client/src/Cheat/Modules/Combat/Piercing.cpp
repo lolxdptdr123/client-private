@@ -25,6 +25,7 @@ static jclass s_vecCls = nullptr;
 static jclass s_mopCls = nullptr;
 static jmethodID s_getEyeHeight = nullptr;
 static jmethodID s_vecHelper = nullptr;
+static jmethodID s_vecCtor = nullptr;
 static jmethodID s_mopCtor = nullptr;
 static jmethodID s_rayTrace = nullptr;
 static jfieldID s_hitVec = nullptr;
@@ -58,6 +59,8 @@ static void Ensure(JNIEnv* env) {
 
     std::string vecN = Mapper::Get("net/minecraft/util/Vec3");
     if (s_vecCls && !vecN.empty()) {
+        s_vecCtor = env->GetMethodID(s_vecCls, "<init>", "(DDD)V");
+        JniOk(env);
         std::string helper = Mapper::Get("createVectorHelper");
         if (!helper.empty()) {
             std::string sig = "(DDD)L" + vecN + ";";
@@ -102,10 +105,18 @@ static void Ensure(JNIEnv* env) {
 }
 
 static jobject MakeVec(JNIEnv* env, double x, double y, double z) {
-    if (!s_vecHelper || !s_vecCls) return nullptr;
-    jobject v = env->CallStaticObjectMethod(s_vecCls, s_vecHelper, x, y, z);
-    JniOk(env);
-    return v;
+    if (!s_vecCls) return nullptr;
+    if (s_vecHelper) {
+        jobject v = env->CallStaticObjectMethod(s_vecCls, s_vecHelper, x, y, z);
+        JniOk(env);
+        if (v) return v;
+    }
+    if (s_vecCtor) {
+        jobject v = env->NewObject(s_vecCls, s_vecCtor, x, y, z);
+        JniOk(env);
+        return v;
+    }
+    return nullptr;
 }
 
 static double ReadD(JNIEnv* env, jobject obj, const char* key) {

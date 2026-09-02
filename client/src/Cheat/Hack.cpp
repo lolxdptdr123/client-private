@@ -126,10 +126,25 @@ void Hack::InitializeGame()
 	}
 
 	auto detectVersion = [&]() {
-		if (m_CachedKlass.contains("net.minecraft.client.entity.EntityPlayerSP"))
-			g_GameVersion = LUNAR_1_8_9;
-		else
+		// 1.7 a EntityPlayerSP (classe parente) ET EntityClientPlayerMP.
+		// Detecter 1.8 via EntityPlayerSP seul classait Lunar 1.7 comme 1.8
+		// et cassait thePlayer / sendQueue (signature EntityPlayerSP).
+		const bool hasClientMP = m_CachedKlass.contains("net.minecraft.client.entity.EntityClientPlayerMP");
+		const bool hasPlayerSP = m_CachedKlass.contains("net.minecraft.client.entity.EntityPlayerSP");
+		if (hasClientMP)
 			g_GameVersion = LUNAR_1_7_10;
+		else if (hasPlayerSP)
+			g_GameVersion = LUNAR_1_8_9;
+		else {
+			HWND h = FindLunarWindow();
+			wchar_t title[256]{};
+			if (h)
+				GetWindowTextW(h, title, 256);
+			if (wcsstr(title, L"1.7.10"))
+				g_GameVersion = LUNAR_1_7_10;
+			else
+				g_GameVersion = LUNAR_1_8_9;
+		}
 		Mapper::Initialize(g_GameVersion);
 	};
 

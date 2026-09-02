@@ -8,10 +8,9 @@ namespace AimAssistSettings {
     inline float fovMin = 0.f;
     inline float fovMax = 120.f;
     inline float distanceMin = 0.f;
-    inline float distanceMax = 4.f;
+    inline float distanceMax = 6.f;
     inline int   priority = 0; // 0 Distance, 1 Fov, 2 HurtTime
     inline bool  targetPlayers = true;
-    inline bool  targetEnemiesOnly = false;
     inline bool  allowInvisible = false;
     inline bool  allowNaked = true;
     inline bool  requireClick = true;
@@ -39,4 +38,5 @@ public:
     }
 
     void Run(JNIEnv* env) override;
+    void OnRender(JNIEnv* env) override;
 };

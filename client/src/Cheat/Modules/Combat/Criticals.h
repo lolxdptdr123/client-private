@@ -21,4 +21,5 @@ public:
     }
 
     void Run(JNIEnv* env) override;
+    void OnRender(JNIEnv* env) override;
 };

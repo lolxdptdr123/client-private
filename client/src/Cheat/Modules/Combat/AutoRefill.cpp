@@ -14,6 +14,7 @@
 #include "../../../Cheat/Hack.h"
 #include "../Misc/Overlay.h"
 #include "../Visuals/Notifications.h"
+#include "../../../Helper/Utils.h"
 
 #include <algorithm>
 #include <cmath>
@@ -31,18 +32,6 @@ static std::atomic<bool> g_legitActive{ false };
 
 static std::vector<std::vector<int>> g_patterns;
 static std::mt19937 g_rng{ std::random_device{}() };
-
-static HWND FindLunarWindow() {
-    HWND h = FindWindowW(nullptr, L"Lunar Client 1.8.9");
-    if (!h) h = FindWindowW(nullptr, L"Lunar Client 1.7.10");
-    if (!h) h = FindWindowW(L"LWJGL", nullptr);
-    return h;
-}
-
-static bool IsLunarFocused() {
-    HWND h = FindLunarWindow();
-    return h && GetForegroundWindow() == h;
-}
 
 static void InitPatterns() {
     if (!g_patterns.empty()) return;
@@ -553,7 +542,7 @@ static void RefillThreadProc() {
         }
         if (!env) continue;
         if (Overlay::isOpen) continue;
-        if (!IsLunarFocused()) continue;
+        if (!IsGameWindowFocused()) continue;
         RunRefill(env);
     }
     if (attached && jvm) jvm->DetachCurrentThread();

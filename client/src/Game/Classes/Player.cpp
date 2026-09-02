@@ -7,18 +7,64 @@
 #include "../Mapper.h"
 
 #include "../../Cheat/Hack.h"
+#include <cmath>
 
 std::string Player::GetName(JNIEnv* env, bool shouldEraseColor)
 {
 	if (this == NULL || !env)
 		return "";
 
-	const auto playerClazz = (Klass*)env->GetObjectClass((jclass)this);
+	const auto playerClazz = (Klass*)env->GetObjectClass((jobject)this);
 	if (!playerClazz)
 		return "";
 
-	const auto getEntityStringMethod = playerClazz->GetMethod(env, Mapper::Get("getDisplayName").data(), Mapper::Get("net/minecraft/util/IChatComponent", 3).data());
-	if (!getEntityStringMethod) { env->DeleteLocalRef((jclass)playerClazz); return ""; }
+	std::string chatSig = Mapper::Get("net/minecraft/util/IChatComponent", 3);
+	std::string mappedName = Mapper::Get("getDisplayName");
+	const char* chatNames[] = {
+		mappedName.c_str(),
+		"getFormattedCommandSenderName",
+		"getDisplayName"
+	};
+	Method* getEntityStringMethod = nullptr;
+	for (const char* n : chatNames) {
+		if (!n || !n[0] || chatSig.empty()) continue;
+		getEntityStringMethod = playerClazz->GetMethod(env, n, chatSig.c_str());
+		if (env->ExceptionCheck()) { env->ExceptionClear(); getEntityStringMethod = nullptr; }
+		if (getEntityStringMethod) break;
+	}
+	if (!getEntityStringMethod) {
+		const char* strNames[] = { "getCommandSenderName", "getName" };
+		for (const char* n : strNames) {
+			Method* m = playerClazz->GetMethod(env, n, "()Ljava/lang/String;");
+			if (env->ExceptionCheck()) { env->ExceptionClear(); m = nullptr; }
+			if (!m) continue;
+			const auto formattedTextObject = m->CallObjectMethod(env, (jobject)this);
+			if (!formattedTextObject) { env->DeleteLocalRef((jclass)playerClazz); return ""; }
+			const auto formattedText = (jstring)formattedTextObject;
+			const auto entityName = env->GetStringUTFChars(formattedText, NULL);
+			if (!entityName) { env->DeleteLocalRef(formattedTextObject); env->DeleteLocalRef((jclass)playerClazz); return ""; }
+			auto ret = std::string(entityName);
+			env->ReleaseStringUTFChars(formattedText, entityName);
+			env->DeleteLocalRef(formattedTextObject);
+			env->DeleteLocalRef((jclass)playerClazz);
+			if (shouldEraseColor) {
+				for (size_t i = 0; i + 1 < ret.size(); ) {
+					if (ret[i] == '\xC2' && (unsigned char)ret[i + 1] == 0xA7) {
+						ret.erase(i, (i + 3 <= ret.size()) ? 3 : 2);
+						continue;
+					}
+					if (ret[i] == '\u00A7') {
+						ret.erase(i, (i + 2 <= ret.size()) ? 2 : 1);
+						continue;
+					}
+					i++;
+				}
+			}
+			return ret;
+		}
+		env->DeleteLocalRef((jclass)playerClazz);
+		return "";
+	}
 	const auto entityStringObject = getEntityStringMethod->CallObjectMethod(env, (jobject)this);
 	if (!entityStringObject) { env->DeleteLocalRef((jclass)playerClazz); return ""; }
 	const auto iChatComponentClazz = g_Instance->FindClass(Mapper::Get("net/minecraft/util/IChatComponent"));
@@ -961,18 +1007,50 @@ void Player::SetAngles(float yaw, float pitch, JNIEnv* env)
 	if (this == NULL || !env)
 		return;
 
-	static jmethodID s_setAngles = nullptr;
-	static bool s_tried = false;
-	if (!s_tried) {
-		s_tried = true;
-		jclass cls = env->GetObjectClass((jobject)this);
-		if (cls) {
-			s_setAngles = env->GetMethodID(cls, Mapper::Get("setAngles").c_str(), "(FF)V");
-			if (env->ExceptionCheck()) { env->ExceptionClear(); s_setAngles = nullptr; }
-			env->DeleteLocalRef(cls);
+	const float y0 = GetRotationYaw(env);
+	const float p0 = GetRotationPitch(env);
+
+	jclass cls = env->GetObjectClass((jobject)this);
+	if (!cls) return;
+
+	jmethodID mid = env->GetMethodID(cls, Mapper::Get("setAngles").c_str(), "(FF)V");
+	if (env->ExceptionCheck()) { env->ExceptionClear(); mid = nullptr; }
+	if (!mid && g_Instance) {
+		Klass* ent = g_Instance->FindClass(Mapper::Get("net/minecraft/entity/Entity").c_str());
+		if (ent) {
+			mid = env->GetMethodID((jclass)ent, Mapper::Get("setAngles").c_str(), "(FF)V");
+			if (env->ExceptionCheck()) { env->ExceptionClear(); mid = nullptr; }
 		}
 	}
-	if (!s_setAngles) return;
-	env->CallVoidMethod((jobject)this, s_setAngles, yaw, pitch);
-	if (env->ExceptionCheck()) env->ExceptionClear();
+	if (mid) {
+		env->CallVoidMethod((jobject)this, mid, yaw, pitch);
+		if (env->ExceptionCheck()) env->ExceptionClear();
+	}
+
+	const float y1 = GetRotationYaw(env);
+	const float p1 = GetRotationPitch(env);
+	const bool methodMoved = (fabsf(y1 - y0) > 1e-4f) || (fabsf(p1 - p0) > 1e-4f);
+
+	if (!methodMoved) {
+		jfieldID fy = env->GetFieldID(cls, Mapper::Get("rotationYaw").c_str(), "F");
+		if (env->ExceptionCheck()) { env->ExceptionClear(); fy = nullptr; }
+		jfieldID fp = env->GetFieldID(cls, Mapper::Get("rotationPitch").c_str(), "F");
+		if (env->ExceptionCheck()) { env->ExceptionClear(); fp = nullptr; }
+		jfieldID fpy = env->GetFieldID(cls, Mapper::Get("prevRotationYaw").c_str(), "F");
+		if (env->ExceptionCheck()) { env->ExceptionClear(); fpy = nullptr; }
+		jfieldID fpp = env->GetFieldID(cls, Mapper::Get("prevRotationPitch").c_str(), "F");
+		if (env->ExceptionCheck()) { env->ExceptionClear(); fpp = nullptr; }
+
+		const float ny = y0 + yaw * 0.15f;
+		float np = p0 - pitch * 0.15f;
+		if (np > 90.f) np = 90.f;
+		if (np < -90.f) np = -90.f;
+
+		if (fy) env->SetFloatField((jobject)this, fy, ny);
+		if (fp) env->SetFloatField((jobject)this, fp, np);
+		if (fpy) env->SetFloatField((jobject)this, fpy, ny);
+		if (fpp) env->SetFloatField((jobject)this, fpp, np);
+	}
+
+	env->DeleteLocalRef(cls);
 }

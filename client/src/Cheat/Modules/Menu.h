@@ -13,7 +13,7 @@ namespace MenuBinds {
     inline int  cr_bind = 0; inline bool cr_listening = false;
     inline int  rod_bind = 0; inline bool rod_listening = false;
     inline int  ab_bind = 0; inline bool ab_listening = false;
-    inline int  ar_bind = 0; inline bool ar_listening = false;  // AutoRefill
+    inline int  ar_bind = 0; inline bool ar_listening = false;
     inline int  al_bind = 0; inline bool al_listening = false;
     inline int  ch_bind = 0; inline bool ch_listening = false;
     inline int  esp_bind = 0; inline bool esp_listening = false;

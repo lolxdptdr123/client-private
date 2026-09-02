@@ -18,12 +18,25 @@ jobject ItemStack::GetItem(JNIEnv* env)
 		return NULL;
 	const auto getItemMethod = itemStackClass->GetMethod(env, Mapper::Get("getItem").data(), Mapper::Get("net/minecraft/item/Item", 3).data());
 	if (env->ExceptionCheck()) env->ExceptionClear();
-	if (!getItemMethod)
-		return NULL;
+	if (getItemMethod) {
+		jobject item = getItemMethod->CallObjectMethod(env, (jobject)this);
+		if (env->ExceptionCheck()) { env->ExceptionClear(); item = nullptr; }
+		if (item) return item;
+	}
 
-	jobject item = getItemMethod->CallObjectMethod(env, (jobject)this);
-	if (env->ExceptionCheck()) { env->ExceptionClear(); return NULL; }
-	return item;
+	std::string itemSig = Mapper::Get("net/minecraft/item/Item", 2);
+	std::string mappedField = Mapper::Get("item");
+	const char* fields[] = { mappedField.c_str(), "theItem", "item" };
+	for (const char* n : fields) {
+		if (!n || !n[0] || itemSig.empty()) continue;
+		Field* f = itemStackClass->GetField(env, n, itemSig.c_str());
+		if (env->ExceptionCheck()) { env->ExceptionClear(); f = nullptr; }
+		if (!f) continue;
+		jobject item = f->GetObjectField(env, (jobject)this, false);
+		if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
+		if (item) return item;
+	}
+	return NULL;
 }
 
 bool ItemStack::IsWeapon(JNIEnv* env)

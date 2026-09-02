@@ -17,6 +17,7 @@
 #include "../../../Game/Classes/GuiScreen.h"
 #include "../../../Game/Classes/MovingObjectPosition.h"
 #include "SwordCheck.h"
+#include "../../../Helper/Utils.h"
 #include <chrono>
 #include <thread>
 #include <cmath>
@@ -58,16 +59,8 @@ static void HookThreadProc() {
     g_mouseHook = nullptr;
 }
 
-// ── Helpers fenêtre ───────────────────────────────────────────────────────────
-static HWND FindLunarWindow() {
-    HWND h = FindWindowW(nullptr, L"Lunar Client 1.8.9");
-    if (!h) h = FindWindowW(nullptr, L"Lunar Client 1.7.10");
-    if (!h) h = FindWindowW(L"LWJGL", nullptr);
-    return h;
-}
 static bool IsLunarFocused() {
-    HWND w = FindLunarWindow();
-    return w && GetForegroundWindow() == w;
+    return IsGameWindowFocused();
 }
 
 // ── DoClick ───────────────────────────────────────────────────────────────────

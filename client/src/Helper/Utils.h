@@ -15,3 +15,4 @@ bool WorldToScreen(Vec3 worldPos, Vec2& screen, std::vector<float>& modelView, s
 Vec3 FromHSB(float h, float s, float v);
 int RandomInteger(const int min, const int max);
 HWND FindLunarWindow();
+bool IsGameWindowFocused();

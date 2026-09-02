@@ -9,6 +9,7 @@
 #include <chrono>
 
 static int  g_lastHrt = 0;
+static int  g_lastHt = 0;
 static bool g_pendingJumpDelay = false;
 static bool g_pendingJumpReset = false;
 static long long g_jumpDelayStart = 0;
@@ -49,13 +50,12 @@ void Velocity::Run(JNIEnv* env) {
     if (!enabled) {
         g_pendingJumpDelay = false;
         g_pendingJumpReset = false;
-        Sleep(20);
         return;
     }
-    if (Overlay::isOpen) { Sleep(20); return; }
+    if (Overlay::isOpen) return;
 
     jobject playerObj = Minecraft::GetThePlayer(env);
-    if (!playerObj) { Sleep(5); return; }
+    if (!playerObj) return;
     auto* player = (Player*)playerObj;
 
     const long long now = NowMs();
@@ -77,13 +77,14 @@ void Velocity::Run(JNIEnv* env) {
 
     int hrt = player->GetHurtResistantTime(env);
     int maxHrt = player->GetMaxHurtResistantTime(env);
-    bool newHit = (maxHrt > 0 && hrt >= maxHrt - 1 && g_lastHrt < maxHrt - 1);
+    int ht = player->GetHurtTime(env);
+    bool newHit = (ht > 0 && g_lastHt <= 0)
+        || (maxHrt > 0 && hrt >= maxHrt - 1 && g_lastHrt < maxHrt - 1);
     g_lastHrt = hrt;
+    g_lastHt = ht;
 
-    if (!newHit) {
-        Sleep(5);
+    if (!newHit)
         return;
-    }
 
     if (VelocitySettings::weaponsOnly) {
         jobject held = player->GetHeldItem(env);
@@ -92,36 +93,33 @@ void Velocity::Run(JNIEnv* env) {
             ok = ((ItemStack*)held)->IsWeapon(env);
             env->DeleteLocalRef(held);
         }
-        if (!ok) { Sleep(5); return; }
+        if (!ok) return;
     }
 
     if (VelocitySettings::onlyLookingAtPlayer) {
         jobject pointed = Minecraft::GetPointedEntity(env);
-        if (!pointed) { Sleep(5); return; }
+        if (!pointed) return;
         env->DeleteLocalRef(pointed);
     }
 
-    if (VelocitySettings::onlyMousePressed && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-        Sleep(5);
+    if (VelocitySettings::onlyMousePressed && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000))
         return;
-    }
 
     bool forward = MovingForward(env);
     bool sprinting = player->IsSprinting(env);
     bool onGround = player->IsOnGround(env);
 
     if (VelocitySettings::mode == 2) {
-        if (!onGround) { Sleep(5); return; }
-        if (!ChanceOk()) { Sleep(5); return; }
-        if (VelocitySettings::onlyWhenMovingForward && !forward) { Sleep(5); return; }
+        if (!onGround) return;
+        if (!ChanceOk()) return;
+        if (VelocitySettings::onlyWhenMovingForward && !forward) return;
         g_pendingJumpDelay = true;
         g_jumpDelayStart = now;
-        Sleep(5);
         return;
     }
 
-    if (VelocitySettings::onlyWhenMovingForward && !forward) { Sleep(5); return; }
-    if (!ChanceOk()) { Sleep(5); return; }
+    if (VelocitySettings::onlyWhenMovingForward && !forward) return;
+    if (!ChanceOk()) return;
 
     double mx = player->GetMotionX(env);
     double my = player->GetMotionY(env);
@@ -138,7 +136,6 @@ void Velocity::Run(JNIEnv* env) {
             player->SetMotionX(mx * (double)mult, env);
             player->SetMotionZ(mz * (double)mult, env);
         }
-        Sleep(5);
         return;
     }
 
@@ -153,5 +150,8 @@ void Velocity::Run(JNIEnv* env) {
         player->SetMotionY(my * (double)vy, env);
         player->SetMotionZ(mz * (double)hx, env);
     }
-    Sleep(5);
+}
+
+void Velocity::OnRender(JNIEnv* env) {
+    Run(env);
 }

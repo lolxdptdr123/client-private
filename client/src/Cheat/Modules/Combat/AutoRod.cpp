@@ -251,15 +251,14 @@ void AutoRod::Run(JNIEnv* env) {
         s_state = RodState::Idle;
         s_targetId = -1;
         s_espOk = false;
-        Sleep(20);
         return;
     }
-    if (Overlay::isOpen || Throw_IsBusy()) { Sleep(10); return; }
+    if (Overlay::isOpen || Throw_IsBusy()) return;
     Ensure(env);
 
     jobject playerObj = Minecraft::GetThePlayer(env);
     jobject worldObj = Minecraft::GetTheWorld(env);
-    if (!playerObj || !worldObj) { Sleep(10); return; }
+    if (!playerObj || !worldObj) return;
     auto* local = (Player*)playerObj;
     long long now = NowMs();
 
@@ -357,6 +356,10 @@ void AutoRod::Run(JNIEnv* env) {
     s_stateAt = now;
     SnapshotEsp(env, worldObj, s_targetId);
     env->DeleteLocalRef(invObj);
+}
+
+void AutoRod::OnRender(JNIEnv* env) {
+    Run(env);
 }
 
 void AutoRod::OnImGuiRender(JNIEnv* env) {

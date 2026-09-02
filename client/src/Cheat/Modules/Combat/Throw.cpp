@@ -11,24 +11,16 @@
 #include "../../../Cheat/Hack.h"
 #include "../Misc/Overlay.h"
 #include "../Visuals/Notifications.h"
+#include "../../../Helper/Utils.h"
+
+#include <thread>
+#include <atomic>
 
 enum class ThrowKind { Pot, Soup, Debuff, Pearl };
 
 static std::thread       g_throwThread;
 static std::atomic<bool> g_running{ false };
 static std::atomic<bool> g_busy{ false };
-
-static HWND FindLunarWindow() {
-    HWND h = FindWindowW(nullptr, L"Lunar Client 1.8.9");
-    if (!h) h = FindWindowW(nullptr, L"Lunar Client 1.7.10");
-    if (!h) h = FindWindowW(L"LWJGL", nullptr);
-    return h;
-}
-
-static bool IsLunarFocused() {
-    HWND h = FindLunarWindow();
-    return h && GetForegroundWindow() == h;
-}
 
 static int DelayFromDisplay(float display) {
     int d = (int)(10.f - display + 0.5f);
@@ -271,7 +263,7 @@ static void ThrowThreadProc() {
     bool potHeld = false, soupHeld = false, debuffHeld = false, pearlHeld = false;
 
     while (g_running) {
-        if (!env || Overlay::isOpen || !IsLunarFocused() || !ThrowSettings::enabled) {
+        if (!env || Overlay::isOpen || !IsGameWindowFocused() || !ThrowSettings::enabled) {
             potHeld = soupHeld = debuffHeld = pearlHeld = false;
             Sleep(15);
             continue;

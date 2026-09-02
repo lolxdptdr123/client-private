@@ -63,7 +63,20 @@ static void BuildMCCache(JNIEnv* env) {
         };
 
     s_mc.fTheMinecraft = GFS("theMinecraft", "net/minecraft/client/Minecraft");
-    s_mc.fThePlayer = GF("thePlayer", "net/minecraft/client/entity/EntityClientPlayerMP");
+
+    auto tryPlayerSig = [&](const char* rawClass) -> Field* {
+        std::string name = Mapper::Get("thePlayer");
+        if (name.empty() || !rawClass) return nullptr;
+        std::string sig = std::string("L") + rawClass + ";";
+        Field* f = s_mc.clsMC->GetField(env, name.c_str(), sig.c_str(), false);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
+        return f;
+    };
+    s_mc.fThePlayer = tryPlayerSig("net/minecraft/client/entity/EntityClientPlayerMP");
+    if (!s_mc.fThePlayer)
+        s_mc.fThePlayer = tryPlayerSig("net/minecraft/client/entity/EntityPlayerSP");
+    if (!s_mc.fThePlayer)
+        s_mc.fThePlayer = GF("thePlayer", "net/minecraft/client/entity/EntityClientPlayerMP");
     if (!s_mc.fThePlayer)
         s_mc.fThePlayer = GF("thePlayer", "net/minecraft/client/entity/EntityPlayerSP");
     if (!s_mc.fThePlayer)
@@ -81,6 +94,12 @@ static void BuildMCCache(JNIEnv* env) {
     s_mc.fGameSettings = GF("gameSettings", "net/minecraft/client/settings/GameSettings");
     s_mc.fTimer = GF("timer", "net/minecraft/util/Timer");
     s_mc.fFontRenderer = GF("fontRendererObj", "net/minecraft/client/gui/FontRenderer");
+    if (!s_mc.fFontRenderer) {
+        std::string frSig = Mapper::Get("net/minecraft/client/gui/FontRenderer", 2);
+        Field* f = s_mc.clsMC->GetField(env, "fontRenderer", frSig.empty() ? "Lnet/minecraft/client/gui/FontRenderer;" : frSig.c_str(), false);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); f = nullptr; }
+        s_mc.fFontRenderer = f;
+    }
     s_mc.fDisplayWidth = GFI("displayWidth");
     s_mc.fDisplayHeight = GFI("displayHeight");
     s_mc.fRightClickDelay = GFI("rightClickDelayTimer");

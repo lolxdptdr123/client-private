@@ -179,6 +179,10 @@ static void ApplyKeepSprint(JNIEnv* env) {
     if (s_keepHit && now > s_keepUntil)
         s_keepHit = false;
 
+    if (wantMove && (lmb || swinging) && AllowHit(env, local, living ? target : nullptr)) {
+        ForceSprint(env, local);
+    }
+
     if (s_keepHit && wantMove) {
         float retained = RetainedSpeed(env, local);
         if (retained != 0.6f) {
@@ -197,16 +201,14 @@ static void ApplyKeepSprint(JNIEnv* env) {
 }
 
 void KeepSprint::Run(JNIEnv* env) {
-    (void)env;
     if (!enabled) {
         s_keepHit = false;
         s_scaled = false;
         s_swingPrev = false;
         s_sprintPrev = false;
-        Sleep(20);
         return;
     }
-    Sleep(5);
+    ApplyKeepSprint(env);
 }
 
 void KeepSprint::OnRender(JNIEnv* env) {

@@ -9,6 +9,7 @@
 #include "../Modules/Misc/Overlay.h"
 
 #include "../../Helper/Communication.h"
+#include "../../Helper/Utils.h"
 #include "../../Helper/HookFunction.h"
 #include "../../../vendors/minhook/MinHook.h"
 #include "../../../vendors/imgui/imgui.h"
@@ -156,6 +157,7 @@ bool __stdcall wglSwapBuffersHook(HDC hdc)
 
         g_hwnd = WindowFromDC(hdc);
         if (g_hwnd) {
+            Overlay::gameHwnd = g_hwnd;
             g_origWndProc = (WNDPROC)SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, (LONG_PTR)HookedWndProc);
         }
 
@@ -172,8 +174,16 @@ bool __stdcall wglSwapBuffersHook(HDC hdc)
     if (!Communication::GetSettings()->m_Destruct)
     {
         // Si Lunar n'est pas la fenêtre active → ne rien rendre, ne rien traiter
-        bool lunarFocused = false;
-        if (g_hwnd) lunarFocused = (GetForegroundWindow() == g_hwnd);
+        bool lunarFocused = IsGameWindowFocused();
+        if (!lunarFocused && g_hwnd) {
+            HWND fg = GetForegroundWindow();
+            if (fg) {
+                lunarFocused = (fg == g_hwnd)
+                    || (GetAncestor(fg, GA_ROOT) == g_hwnd)
+                    || (GetAncestor(g_hwnd, GA_ROOT) == fg)
+                    || (GetAncestor(fg, GA_ROOT) == GetAncestor(g_hwnd, GA_ROOT));
+            }
+        }
 
         GLint viewport[4];
         glGetIntegerv(GL_VIEWPORT, viewport);
@@ -181,20 +191,19 @@ bool __stdcall wglSwapBuffersHook(HDC hdc)
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize = ImVec2{ (float)viewport[2], (float)viewport[3] };
 
-        if (lunarFocused) {
-            if (g_Instance && g_Instance->GetJVM()) {
-                jint jres = g_Instance->GetJVM()->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
-                if (jres == JNI_EDETACHED) {
-                    if (g_Instance->GetJVM()->AttachCurrentThreadAsDaemon(
-                            reinterpret_cast<void**>(&env), nullptr) != JNI_OK)
-                        env = nullptr;
-                    else
-                        s_glThreadAttached = true;
-                }
+        if (g_Instance && g_Instance->GetJVM()) {
+            jint jres = g_Instance->GetJVM()->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+            if (jres == JNI_EDETACHED) {
+                if (g_Instance->GetJVM()->AttachCurrentThreadAsDaemon(
+                        reinterpret_cast<void**>(&env), nullptr) != JNI_OK)
+                    env = nullptr;
+                else
+                    s_glThreadAttached = true;
             }
-            for (const auto& mod : Modules::GetRegisteredModules())
-                mod->OnRender(env);
         }
+        if (env && env->ExceptionCheck()) env->ExceptionClear();
+        for (const auto& mod : Modules::GetRegisteredModules())
+            mod->OnRender(env);
 
         FeedMouseInputs();
         ImGui_ImplOpenGL2_NewFrame();

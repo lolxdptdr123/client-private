@@ -12,6 +12,7 @@
 #include <mutex>
 #include <unordered_set>
 #include <string>
+#include <cstring>
 
 static std::mutex s_mu;
 static std::unordered_set<int> s_spawned;
@@ -22,6 +23,7 @@ static bool s_active = false;
 
 static jfieldID s_sendQueue = nullptr;
 static jfieldID s_playerInfoMap = nullptr;
+static jfieldID s_playerInfoList = nullptr;
 static jfieldID s_gameProfile = nullptr;
 static jmethodID s_gpGetName = nullptr;
 static jmethodID s_mapContains = nullptr;
@@ -48,6 +50,10 @@ static void EnsureJni(JNIEnv* env) {
     Klass* nh = nhN.empty() ? nullptr : g_Instance->FindClass(nhN.c_str());
     if (nh) {
         s_playerInfoMap = env->GetFieldID((jclass)nh, Mapper::Get("playerInfoMap").c_str(), "Ljava/util/Map;");
+        JniOk(env);
+        std::string listName = Mapper::Get("playerInfoList");
+        if (listName.empty()) listName = "playerInfoList";
+        s_playerInfoList = env->GetFieldID((jclass)nh, listName.c_str(), "Ljava/util/List;");
         JniOk(env);
     }
 
@@ -76,7 +82,9 @@ static void EnsureJni(JNIEnv* env) {
 }
 
 static bool InTabList(JNIEnv* env, jobject entity) {
-    if (!s_gameProfile || !s_gpGetName || !s_sendQueue || !s_playerInfoMap || !s_mapContains)
+    if (!s_gameProfile || !s_gpGetName || !s_sendQueue)
+        return true;
+    if (!s_playerInfoMap && !s_playerInfoList)
         return true;
 
     jobject profile = env->GetObjectField(entity, s_gameProfile);
@@ -94,16 +102,67 @@ static bool InTabList(JNIEnv* env, jobject entity) {
     JniOk(env);
     if (!queue) { env->DeleteLocalRef(nameObj); return true; }
 
-    jobject mapObj = env->GetObjectField(queue, s_playerInfoMap);
-    env->DeleteLocalRef(queue);
-    JniOk(env);
-    if (!mapObj) { env->DeleteLocalRef(nameObj); return true; }
+    if (s_playerInfoMap && s_mapContains) {
+        jobject mapObj = env->GetObjectField(queue, s_playerInfoMap);
+        JniOk(env);
+        if (mapObj) {
+            jboolean in = env->CallBooleanMethod(mapObj, s_mapContains, nameObj);
+            JniOk(env);
+            env->DeleteLocalRef(mapObj);
+            env->DeleteLocalRef(queue);
+            env->DeleteLocalRef(nameObj);
+            return in == JNI_TRUE;
+        }
+    }
 
-    jboolean in = env->CallBooleanMethod(mapObj, s_mapContains, nameObj);
-    JniOk(env);
-    env->DeleteLocalRef(mapObj);
+    if (s_playerInfoList) {
+        jobject listObj = env->GetObjectField(queue, s_playerInfoList);
+        env->DeleteLocalRef(queue);
+        JniOk(env);
+        if (!listObj) { env->DeleteLocalRef(nameObj); return true; }
+        jclass listCls = env->GetObjectClass(listObj);
+        jmethodID toArray = listCls ? env->GetMethodID(listCls, "toArray", "()[Ljava/lang/Object;") : nullptr;
+        if (listCls) env->DeleteLocalRef(listCls);
+        JniOk(env);
+        if (!toArray) { env->DeleteLocalRef(listObj); env->DeleteLocalRef(nameObj); return true; }
+        auto arr = (jobjectArray)env->CallObjectMethod(listObj, toArray);
+        env->DeleteLocalRef(listObj);
+        JniOk(env);
+        if (!arr) { env->DeleteLocalRef(nameObj); return true; }
+        jsize n = env->GetArrayLength(arr);
+        const char* want = env->GetStringUTFChars((jstring)nameObj, nullptr);
+        bool found = false;
+        for (jsize i = 0; i < n && want; i++) {
+            jobject e = env->GetObjectArrayElement(arr, i);
+            if (!e) continue;
+            jclass ec = env->GetObjectClass(e);
+            jfieldID nf = ec ? env->GetFieldID(ec, "name", "Ljava/lang/String;") : nullptr;
+            JniOk(env);
+            jobject ns = nullptr;
+            if (nf) ns = env->GetObjectField(e, nf);
+            JniOk(env);
+            if (!ns && s_gpGetName)
+                ns = env->CallObjectMethod(e, s_gpGetName);
+            JniOk(env);
+            if (ns) {
+                const char* have = env->GetStringUTFChars((jstring)ns, nullptr);
+                if (have && want && strcmp(have, want) == 0) found = true;
+                if (have) env->ReleaseStringUTFChars((jstring)ns, have);
+                env->DeleteLocalRef(ns);
+            }
+            if (ec) env->DeleteLocalRef(ec);
+            env->DeleteLocalRef(e);
+            if (found) break;
+        }
+        if (want) env->ReleaseStringUTFChars((jstring)nameObj, want);
+        env->DeleteLocalRef(arr);
+        env->DeleteLocalRef(nameObj);
+        return found;
+    }
+
+    env->DeleteLocalRef(queue);
     env->DeleteLocalRef(nameObj);
-    return in == JNI_TRUE;
+    return true;
 }
 
 void AntiBot_Reset() {

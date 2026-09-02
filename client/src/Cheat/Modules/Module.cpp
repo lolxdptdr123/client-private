@@ -42,47 +42,17 @@
 #include "Misc/armor.h"
 #include "Misc/ArmorSwitcher.h"
 #include "Menu.h"
+#include "Misc/Overlay.h"
 #pragma endregion
 
 #pragma region Game classes includes
 #include "../../Game/Classes/Minecraft.h"
 #include "../../Game/Classes/ActiveRenderInfo.h"
 #include "../../Game/Classes/GuiScreen.h"
-#include "Misc/Overlay.h"
 #pragma endregion
-
-// ── Cache fenêtre Lunar ───────────────────────────────────────────────────────
-// FindWindowW est appelé depuis chaque thread module à chaque tick.
-// C'est une opération lente (scan de toutes les fenêtres).
-// On le cache : re-vérifié toutes les 2 secondes seulement.
-static HWND    s_lunarHwnd = nullptr;
-static DWORD   s_lunarHwndTick = 0;
-static CRITICAL_SECTION s_hwndCs;
-static bool    s_hwndCsInit = false;
-
-static HWND GetLunarHwnd() {
-    if (!s_hwndCsInit) return nullptr;
-
-    DWORD now = GetTickCount();
-    EnterCriticalSection(&s_hwndCs);
-    // Re-cherche toutes les 2000ms seulement
-    if (s_lunarHwnd == nullptr || (now - s_lunarHwndTick) > 2000) {
-        HWND h = FindLunarWindow();
-        s_lunarHwnd = h;
-        s_lunarHwndTick = now;
-    }
-    HWND result = s_lunarHwnd;
-    LeaveCriticalSection(&s_hwndCs);
-    return result;
-}
 
 void Modules::InitializeModules()
 {
-    // Init critical section pour le cache HWND
-    if (!s_hwndCsInit) {
-        InitializeCriticalSection(&s_hwndCs);
-        s_hwndCsInit = true;
-    }
 
     Clicker::Start();
     Scroll::Start();
@@ -127,9 +97,9 @@ void Modules::InitializeModules()
     m_Modules.push_back(new EnemiesModule());
     m_Modules.push_back(new AutoRefill());
 
-    for (auto& mod : m_Modules)
+    for (Module* mod : m_Modules)
     {
-        auto thread = std::thread([&mod]()
+        auto thread = std::thread([mod]()
             {
                 JavaVM* jvm = g_Instance->GetJVM();
 
@@ -141,72 +111,62 @@ void Modules::InitializeModules()
                     if (res != JNI_OK) return;
                 }
 
-                // Cache local par thread — évite un appel JNI GetCurrentScreen
-                // à chaque tick quand on est clairement en jeu
                 DWORD screenCheckTick = 0;
                 bool  cachedInGame = false;
                 bool  cachedInInventory = false;
-                bool  isClickerModule = (strcmp(mod->GetName(), "Clicker") == 0);
-                bool  isAimAssistModule = (strcmp(mod->GetName(), "Aim Assist") == 0);
-                bool  isPiercingModule = (strcmp(mod->GetName(), "Piercing") == 0);
-                bool  isKeepSprintModule = (strcmp(mod->GetName(), "KeepSprint") == 0);
-                bool  isCriticalsModule = (strcmp(mod->GetName(), "Criticals") == 0);
-                bool  isInvWalkModule = (strcmp(mod->GetName(), "InvWalk") == 0);
-                bool  isNoJumpDelayModule = (strcmp(mod->GetName(), "NoJumpDelay") == 0);
-                bool  isQuickAccelModule = (strcmp(mod->GetName(), "QuickAccel") == 0);
+                const char* modName = mod->GetName();
+                bool  isAimAssistModule = (strcmp(modName, "Aim Assist") == 0);
+                bool  isPiercingModule = (strcmp(modName, "Piercing") == 0);
+                bool  isKeepSprintModule = (strcmp(modName, "KeepSprint") == 0);
+                bool  isCriticalsModule = (strcmp(modName, "Criticals") == 0);
+                bool  isInvWalkModule = (strcmp(modName, "InvWalk") == 0);
+                bool  isNoJumpDelayModule = (strcmp(modName, "NoJumpDelay") == 0);
+                bool  isQuickAccelModule = (strcmp(modName, "QuickAccel") == 0);
+
+                if (isAimAssistModule || isPiercingModule || isKeepSprintModule || isCriticalsModule)
+                    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
                 while (!Communication::GetSettings()->m_Destruct)
                 {
-                    if (!Minecraft::GetTheMinecraft(env)) { Sleep(50); continue; }
+                    if (env->PushLocalFrame(64) != JNI_OK) { Sleep(50); continue; }
 
-                    // Menu ouvert → pause
-                    if (Overlay::isOpen) { Sleep(50); continue; }
+                    if (env->ExceptionCheck()) env->ExceptionClear();
 
-                    // Vérification fenêtre Lunar désactivée temporairement (debug)
-                    HWND lunar = GetLunarHwnd();
-                    if (!lunar || GetForegroundWindow() != lunar) {
-                        if (Overlay::isOpen) Overlay::isOpen = false;
-                        Sleep(50);
-                        continue;
-                    }
+                    if (Overlay::isOpen) { env->PopLocalFrame(nullptr); Sleep(50); continue; }
 
-                    // Vérification écran — mis en cache 500ms
-                    // GetCurrentScreen + IsChat via JNI à 200 FPS = freeze
                     DWORD now = GetTickCount();
                     if ((now - screenCheckTick) > 200 || isInvWalkModule) {
                         jobject screenObj = Minecraft::GetCurrentScreen(env);
                         auto* screen = (GuiScreen*)screenObj;
                         cachedInGame = (screen == nullptr);
                         cachedInInventory = (screen != nullptr) && screen->IsInventory(env);
+                        g_playerInGame.store(cachedInGame);
                         if (screenObj) env->DeleteLocalRef(screenObj);
                         screenCheckTick = now;
                     }
+
+                    const bool hasPlayer = Minecraft::GetThePlayer(env) != nullptr;
+                    const bool hasWorld = Minecraft::GetTheWorld(env) != nullptr;
 
                     bool shouldRun;
                     if (isInvWalkModule)
                         shouldRun = !cachedInGame;
                     else
-                        shouldRun = cachedInGame || (isClickerModule && cachedInInventory);
+                        shouldRun = hasPlayer && hasWorld;
 
-                    if (shouldRun
-                        && Minecraft::GetThePlayer(env)
-                        && Minecraft::GetTheWorld(env))
+                    if (shouldRun)
                     {
                         try {
                             mod->Run(env);
                         }
-                        catch (const std::exception&) {
-                            jvm->DetachCurrentThread();
-                            return;
-                        }
                         catch (...) {
-                            jvm->DetachCurrentThread();
-                            return;
                         }
+                        env->PopLocalFrame(nullptr);
                         Sleep((isAimAssistModule || isPiercingModule || isKeepSprintModule || isCriticalsModule || isInvWalkModule || isNoJumpDelayModule || isQuickAccelModule) ? 2 : 5);
                     }
                     else
                     {
+                        env->PopLocalFrame(nullptr);
                         Sleep(50);
                     }
                 }
@@ -237,11 +197,6 @@ void Modules::DestroyModules()
 
     m_Modules.clear();
     m_ModuleThread.clear();
-
-    if (s_hwndCsInit) {
-        DeleteCriticalSection(&s_hwndCs);
-        s_hwndCsInit = false;
-    }
 }
 
 std::vector<Module*>     Modules::m_Modules;

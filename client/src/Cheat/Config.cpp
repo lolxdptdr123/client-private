@@ -229,6 +229,12 @@ void BindS(const char* k, char* p, int n) { g_binds.push_back({ k, KS, p, n }); 
 void RegisterBinds() {
     if (!g_binds.empty()) return;
 
+    BindI("clicker.cps", &Clicker::cps);
+    BindI("clicker.mode", &Clicker::mode);
+    BindB("clicker.exhaust", &Clicker::exhaust);
+    BindB("clicker.requireClick", &Clicker::requireClick);
+    BindB("clicker.weaponsOnly", &Clicker::weaponsOnly);
+
     BindI("aa.mode", &AimAssistSettings::currentMode);
     BindF("aa.speed", &AimAssistSettings::speed);
     BindF("aa.fovMin", &AimAssistSettings::fovMin);
@@ -237,7 +243,6 @@ void RegisterBinds() {
     BindF("aa.distanceMax", &AimAssistSettings::distanceMax);
     BindI("aa.priority", &AimAssistSettings::priority);
     BindB("aa.targetPlayers", &AimAssistSettings::targetPlayers);
-    BindB("aa.targetEnemiesOnly", &AimAssistSettings::targetEnemiesOnly);
     BindB("aa.allowInvisible", &AimAssistSettings::allowInvisible);
     BindB("aa.allowNaked", &AimAssistSettings::allowNaked);
     BindB("aa.requireClick", &AimAssistSettings::requireClick);
@@ -246,12 +251,6 @@ void RegisterBinds() {
     BindB("aa.keepOnTarget", &AimAssistSettings::keepOnTarget);
     BindI("aa.keepOnTargetKeybind", &AimAssistSettings::keepOnTargetKeybind);
     BindI("aa.multipoint", &AimAssistSettings::multipoint);
-
-    BindI("clicker.cps", &Clicker::cps);
-    BindI("clicker.mode", &Clicker::mode);
-    BindB("clicker.exhaust", &Clicker::exhaust);
-    BindB("clicker.requireClick", &Clicker::requireClick);
-    BindB("clicker.weaponsOnly", &Clicker::weaponsOnly);
 
     BindI("vel.mode", &VelocitySettings::mode);
     BindF("vel.horizontal", &VelocitySettings::horizontal);

@@ -222,22 +222,24 @@ void Criticals::Run(JNIEnv* env) {
         if (s_timerActive) RestoreTimer(env);
         s_lagging = false;
         s_wasHitAir = false;
-        Sleep(20);
         return;
     }
     if (Overlay::isOpen) {
         if (s_timerActive) RestoreTimer(env);
-        Sleep(20);
         return;
     }
 
     Ensure(env);
     jobject playerObj = Minecraft::GetThePlayer(env);
-    if (!playerObj) { Sleep(5); return; }
+    if (!playerObj) return;
     auto* player = (Player*)playerObj;
 
     if (CriticalsSettings::mode == 0)
         TickPacket(env, player, playerObj);
     else
         TickTimer(env, player);
+}
+
+void Criticals::OnRender(JNIEnv* env) {
+    Run(env);
 }

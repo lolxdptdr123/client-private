@@ -268,6 +268,13 @@ void Mapper::Initialize(const GameVersions version)
 			g_Mappings["itemStackDisplayName"] = "getDisplayName";
 			g_Mappings["PROJECTION"] = "PROJECTION";
 			g_Mappings["MODELVIEW"] = "MODELVIEW";
+			g_Mappings["fontRendererObj"] = "fontRendererObj";
+			g_Mappings["playerInfoMap"] = "playerInfoMap";
+		} else {
+			g_Mappings["net/minecraft/client/entity/EntityPlayerSP"] = "net/minecraft/client/entity/EntityPlayerSP";
+			g_Mappings["fontRendererObj"] = "fontRendererObj";
+			g_Mappings["playerInfoMap"] = "playerInfoMap";
+			g_Mappings["playerInfoList"] = "playerInfoList";
 		}
 		break;
 	}
