@@ -120,35 +120,39 @@ int ItemStack::GetMetadata(JNIEnv* env)
 	if (this == NULL || !env)
 		return 0;
 
-	static jfieldID s_field = nullptr;
-	static jmethodID s_method = nullptr;
-	static int s_mode = 0;
-	if (s_mode == 0) {
-		s_mode = 3;
-		const auto itemStackClass = g_Instance->FindClass(Mapper::Get("net/minecraft/item/ItemStack"));
-		if (!itemStackClass)
-			return 0;
-		s_field = env->GetFieldID((jclass)itemStackClass, Mapper::Get("metadata").c_str(), "I");
-		if (env->ExceptionCheck()) { env->ExceptionClear(); s_field = nullptr; }
-		if (s_field) {
-			s_mode = 1;
-		} else {
-			s_method = env->GetMethodID((jclass)itemStackClass, Mapper::Get("getItemDamage").c_str(), "()I");
-			if (env->ExceptionCheck()) { env->ExceptionClear(); s_method = nullptr; }
-			if (s_method) s_mode = 2;
-		}
-	}
-	if (s_mode == 1) {
-		int v = env->GetIntField((jobject)this, s_field);
-		if (env->ExceptionCheck()) { env->ExceptionClear(); return 0; }
-		return v;
-	}
-	if (s_mode == 2) {
-		int v = env->CallIntMethod((jobject)this, s_method);
-		if (env->ExceptionCheck()) { env->ExceptionClear(); return 0; }
-		return v;
-	}
-	return 0;
+	int meta = 0;
+	jclass cls = env->GetObjectClass((jobject)this);
+	if (!cls)
+		return 0;
+
+	auto tryField = [&](const char* name) {
+		if (!name || !name[0]) return;
+		jfieldID f = env->GetFieldID(cls, name, "I");
+		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+		if (!f) return;
+		int v = env->GetIntField((jobject)this, f);
+		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+		if (v) meta = v;
+	};
+	auto tryMethod = [&](const char* name) {
+		if (!name || !name[0]) return;
+		jmethodID m = env->GetMethodID(cls, name, "()I");
+		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+		if (!m) return;
+		int v = env->CallIntMethod((jobject)this, m);
+		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+		if (v) meta = v;
+	};
+
+	tryMethod(Mapper::Get("getItemDamage").c_str());
+	tryMethod("getItemDamage");
+	tryMethod("getMetadata");
+	tryField(Mapper::Get("metadata").c_str());
+	tryField("itemDamage");
+	tryField("damage");
+
+	env->DeleteLocalRef(cls);
+	return meta;
 }
 
 std::string ItemStack::GetDisplayName(JNIEnv* env)

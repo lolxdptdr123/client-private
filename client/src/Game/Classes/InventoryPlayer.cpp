@@ -20,6 +20,9 @@ int InventoryPlayer::GetSlot(JNIEnv* env)
 	if (inventoryPlayerClass)
 		env->DeleteLocalRef((jclass)inventoryPlayerClass);
 
+	if (!hotbarSlotField)
+		return 0;
+
 	return hotbarSlotField->GetIntField(env, this);
 }
 
@@ -57,6 +60,35 @@ jobject InventoryPlayer::GetStackInSlot(int slot, JNIEnv* env)
 
 	jobject r = getStackInSlotMethod->CallObjectMethod(env, (jobject)this, false, slot);
 	if (env->ExceptionCheck()) { env->ExceptionClear(); return NULL; }
+	return r;
+}
+
+jobject InventoryPlayer::GetArmorItem(int index, JNIEnv* env)
+{
+	if (this == NULL || !env || index < 0 || index > 3)
+		return NULL;
+
+	const auto inventoryPlayerClass = (Klass*)env->GetObjectClass((jobject)this);
+	if (!inventoryPlayerClass)
+		return NULL;
+
+	std::string sig = "[" + Mapper::Get("net/minecraft/item/ItemStack", 2);
+	Field* f = inventoryPlayerClass->GetField(env, Mapper::Get("armorInventory").c_str(), sig.c_str());
+	if (env->ExceptionCheck()) { env->ExceptionClear(); f = nullptr; }
+	env->DeleteLocalRef((jclass)inventoryPlayerClass);
+	if (!f)
+		return NULL;
+
+	auto arr = (jobjectArray)f->GetObjectField(env, (jobject)this);
+	if (env->ExceptionCheck()) { env->ExceptionClear(); return NULL; }
+	if (!arr)
+		return NULL;
+	jsize n = env->GetArrayLength(arr);
+	jobject r = nullptr;
+	if (index < n)
+		r = env->GetObjectArrayElement(arr, index);
+	if (env->ExceptionCheck()) { env->ExceptionClear(); r = nullptr; }
+	env->DeleteLocalRef(arr);
 	return r;
 }
 

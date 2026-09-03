@@ -758,7 +758,30 @@ jobject Player::GetHeldItem(JNIEnv* env)
 	if (!getHeldItemMethod)
 		return nullptr;
 
-	return getHeldItemMethod->CallObjectMethod(env, (jobject)this);
+	jobject held = getHeldItemMethod->CallObjectMethod(env, (jobject)this);
+	if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
+	return held;
+}
+
+jobject Player::GetEquipmentInSlot(int slot, JNIEnv* env)
+{
+	if (this == NULL || !env)
+		return NULL;
+
+	const auto playerClazz = (Klass*)env->GetObjectClass((jobject)this);
+	if (!playerClazz)
+		return NULL;
+
+	std::string sig = "(I)" + Mapper::Get("net/minecraft/item/ItemStack", 2);
+	const auto m = playerClazz->GetMethod(env, Mapper::Get("getEquipmentInSlot").data(), sig.c_str());
+	env->DeleteLocalRef((jclass)playerClazz);
+	if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
+	if (!m)
+		return nullptr;
+
+	jobject r = m->CallObjectMethod(env, (jobject)this, false, slot);
+	if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
+	return r;
 }
 
 jobject Player::GetInventoryPlayer(JNIEnv* env)

@@ -6,6 +6,7 @@ public:
 	int GetSlot(JNIEnv* env);
 	void SetSlot(int slot, JNIEnv* env);
 	jobject GetStackInSlot(int slot, JNIEnv* env);
+	jobject GetArmorItem(int index, JNIEnv* env);
 	bool IsHotbarFull(JNIEnv* env);
 	int CountEmptyHotbarSlots(JNIEnv* env);
 };

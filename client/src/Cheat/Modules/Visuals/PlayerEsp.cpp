@@ -19,12 +19,16 @@
 #include "../Misc/Enemies.h"
 
 #include "../../../../vendors/imgui/imgui.h"
+
+#include "../../../../vendors/imgui/imgui.h"
 #include <gl/GL.h>
 #pragma comment(lib, "opengl32.lib")
 #include <cmath>
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <unordered_map>
+#include <cstring>
 
 struct PespEnch { int id; int lvl; };
 struct PespPot { int id; int duration; int amp; };
@@ -32,9 +36,12 @@ struct PespSlot {
     int itemId = -1;
     int meta = 0;
     bool enchanted = false;
+    bool splash = false;
+    int tintRgb = -1;
     std::string name;
     std::vector<PespEnch> enchants;
     int count = 0;
+    jobject stackRef = nullptr;
 };
 struct PespPlayer {
     Vec3 feet{};
@@ -49,6 +56,7 @@ struct PespPlayer {
     PespSlot held{};
     int gappleCount = 0;
     int potionInvCount = 0;
+    std::vector<PespSlot> invPots;
     std::vector<PespPot> potions;
 };
 
@@ -57,6 +65,7 @@ static std::vector<float> s_mv, s_proj;
 
 static const int kArmorEnch[] = { 0, 1, 2, 3, 4, 7, 34 };
 static const int kWeaponEnch[] = { 16, 17, 18, 19, 20, 21, 32, 33, 34, 35, 48, 49, 50, 51 };
+static const int kToolEnch[] = { 32, 33, 34, 35 };
 
 static void JniOk(JNIEnv* env) {
     if (env && env->ExceptionCheck()) env->ExceptionClear();
@@ -75,10 +84,30 @@ static float ReadFloat(JNIEnv* env, jobject obj, const char* key) {
 #define GL_ALPHA_TEST 0x0BC0
 #endif
 
-static const char* PotionTexturePath(int meta) {
-    if (meta & 16384)
+static const char* PotionTexturePath(bool splash) {
+    if (splash)
         return "textures/items/potion_bottle_splash.png";
     return "textures/items/potion_bottle_drinkable.png";
+}
+
+static int PotionLiquidColor(int meta) {
+    switch (meta & 15) {
+        case 1:  return 0xCD5CAB; // regen
+        case 2:  return 0x7CAFC6; // speed
+        case 3:  return 0xE49A3A; // fire res
+        case 4:  return 0x4E9331; // poison
+        case 5:  return 0xF82423; // instant health
+        case 6:  return 0x1F1FA1; // night vision
+        case 7:  return 0x7F8392; // (unused / clear)
+        case 8:  return 0x484D48; // weakness
+        case 9:  return 0x932423; // strength
+        case 10: return 0x5A6C81; // slowness
+        case 11: return 0x22FF4C; // jump
+        case 12: return 0x430A09; // harming
+        case 13: return 0x2E5299; // water breathing
+        case 14: return 0x7F8392; // invis
+        default: return 0x385DC6; // water / mundane
+    }
 }
 
 static const char* ItemTexturePath(int id) {
@@ -113,8 +142,25 @@ static const char* ItemTexturePath(int id) {
         case 258: return "textures/items/iron_axe.png";
         case 279: return "textures/items/diamond_axe.png";
         case 286: return "textures/items/gold_axe.png";
+        case 270: return "textures/items/wood_pickaxe.png";
+        case 274: return "textures/items/stone_pickaxe.png";
+        case 257: return "textures/items/iron_pickaxe.png";
+        case 278: return "textures/items/diamond_pickaxe.png";
+        case 285: return "textures/items/gold_pickaxe.png";
+        case 269: return "textures/items/wood_shovel.png";
+        case 273: return "textures/items/stone_shovel.png";
+        case 256: return "textures/items/iron_shovel.png";
+        case 277: return "textures/items/diamond_shovel.png";
+        case 284: return "textures/items/gold_shovel.png";
+        case 290: return "textures/items/wood_hoe.png";
+        case 291: return "textures/items/stone_hoe.png";
+        case 292: return "textures/items/iron_hoe.png";
+        case 293: return "textures/items/diamond_hoe.png";
+        case 294: return "textures/items/gold_hoe.png";
         case 261: return "textures/items/bow_standby.png";
         case 346: return "textures/items/fishing_rod_uncast.png";
+        case 359: return "textures/items/shears.png";
+        case 259: return "textures/items/flint_and_steel.png";
         case 322: return "textures/items/apple_golden.png";
         case 368: return "textures/items/ender_pearl.png";
         case 373: return "textures/items/potion_bottle_drinkable.png";
@@ -127,28 +173,135 @@ static const char* ItemTexturePath(int id) {
     }
 }
 
+static jobject CallItemStackI(JNIEnv* env, jobject obj, const char* classKey, const char* methodKey, int arg) {
+    if (!env || !obj) return nullptr;
+    Klass* k = g_Instance->FindClass(Mapper::Get(classKey));
+    jclass localCls = nullptr;
+    if (!k) {
+        localCls = env->GetObjectClass(obj);
+        k = (Klass*)localCls;
+    }
+    if (!k) return nullptr;
+    std::string sig = "(I)" + Mapper::Get("net/minecraft/item/ItemStack", 2);
+    Method* m = k->GetMethod(env, Mapper::Get(methodKey).c_str(), sig.c_str());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); m = nullptr; }
+    jobject r = nullptr;
+    if (m) {
+        r = m->CallObjectMethod(env, obj, false, arg);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); r = nullptr; }
+    }
+    if (localCls) env->DeleteLocalRef(localCls);
+    return r;
+}
+
+static bool BindMcTexture(JNIEnv* env, const char* path);
+
+static jobject GetArmorStack(JNIEnv* env, Player* ent, InventoryPlayer* inv, int armorIndex) {
+    jobject st = CallItemStackI(env, (jobject)ent, "net/minecraft/entity/EntityLivingBase", "getEquipmentInSlot", armorIndex + 1);
+    if (!st) st = CallItemStackI(env, (jobject)ent, "net/minecraft/entity/player/EntityPlayer", "getEquipmentInSlot", armorIndex + 1);
+    if (!st) st = CallItemStackI(env, (jobject)ent, "net/minecraft/entity/EntityLivingBase", "getCurrentArmor", armorIndex);
+    if (!st && inv) st = inv->GetArmorItem(armorIndex, env);
+    if (!st && inv) st = inv->GetStackInSlot(36 + armorIndex, env);
+    return st;
+}
+
+static jobject GetHeldStack(JNIEnv* env, Player* ent) {
+    jobject held = ent->GetHeldItem(env);
+    if (held) return held;
+    held = CallItemStackI(env, (jobject)ent, "net/minecraft/entity/EntityLivingBase", "getEquipmentInSlot", 0);
+    if (held) return held;
+    return CallItemStackI(env, (jobject)ent, "net/minecraft/entity/player/EntityPlayer", "getEquipmentInSlot", 0);
+}
+
+static bool BindMcTexture(JNIEnv* env, const char* path);
+
+static ImTextureID GetMcTexId(JNIEnv* env, const char* path) {
+    const ImTextureID none = (ImTextureID)0;
+    if (!env || !path) return none;
+    static std::unordered_map<std::string, ImTextureID> cache;
+    auto it = cache.find(path);
+    if (it != cache.end()) return it->second;
+    if (!BindMcTexture(env, path)) return none;
+    GLint tex = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex);
+    if (tex <= 0) return none;
+    ImTextureID id = (ImTextureID)(intptr_t)tex;
+    cache.emplace(path, id);
+    return id;
+}
+
+static const char* ItemAbbrev(int id) {
+    switch (id) {
+        case 298: case 302: case 306: case 310: case 314: return "Helm";
+        case 299: case 303: case 307: case 311: case 315: return "Chest";
+        case 300: case 304: case 308: case 312: case 316: return "Legs";
+        case 301: case 305: case 309: case 313: case 317: return "Boots";
+        case 276: return "DiaSw";
+        case 267: return "IronSw";
+        case 283: return "GoldSw";
+        case 268: return "WoodSw";
+        case 272: return "StnSw";
+        case 261: return "Bow";
+        case 322: return "Gap";
+        case 373: return "Pot";
+        case 368: return "Pearl";
+        default: return nullptr;
+    }
+}
+static bool IsArmorItem(int id) { return id >= 298 && id <= 317; }
+static bool IsToolOrWeapon(int id) {
+    if (id == 261 || id == 346 || id == 359 || id == 259) return true;
+    if (id == 267 || id == 268 || id == 272 || id == 276 || id == 283) return true;
+    if (id == 258 || id == 271 || id == 275 || id == 279 || id == 286) return true;
+    if (id == 256 || id == 257 || id == 269 || id == 270 || id == 273 || id == 274) return true;
+    if (id == 277 || id == 278 || id == 284 || id == 285) return true;
+    if (id >= 290 && id <= 294) return true;
+    return false;
+}
+
+static jobject GetTextureManager(JNIEnv* env) {
+    jobject mc = Minecraft::GetTheMinecraft(env);
+    if (!mc) return nullptr;
+    Klass* mcCls = g_Instance->FindClass(Mapper::Get("net/minecraft/client/Minecraft"));
+    if (!mcCls) { env->DeleteLocalRef(mc); return nullptr; }
+    Field* fEng = mcCls->GetField(env, Mapper::Get("renderEngine").c_str(),
+        Mapper::Get("net/minecraft/client/renderer/texture/TextureManager", 2).c_str());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); fEng = nullptr; }
+    jobject tm = fEng ? fEng->GetObjectField(env, mc) : nullptr;
+    env->DeleteLocalRef(mc);
+    return tm;
+}
+
+static jobject MakeResourceLocation(JNIEnv* env, const char* path) {
+    Klass* rlCls = g_Instance->FindClass(Mapper::Get("net/minecraft/util/ResourceLocation"));
+    if (!rlCls || !path) return nullptr;
+    jmethodID ctor2 = env->GetMethodID((jclass)rlCls, "<init>", "(Ljava/lang/String;Ljava/lang/String;)V");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); ctor2 = nullptr; }
+    if (ctor2) {
+        jstring domain = env->NewStringUTF("minecraft");
+        jstring jpath = env->NewStringUTF(path);
+        jobject loc = env->NewObject((jclass)rlCls, ctor2, domain, jpath);
+        env->DeleteLocalRef(domain);
+        env->DeleteLocalRef(jpath);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); loc = nullptr; }
+        if (loc) return loc;
+    }
+    jmethodID ctor1 = env->GetMethodID((jclass)rlCls, "<init>", "(Ljava/lang/String;)V");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); ctor1 = nullptr; }
+    if (!ctor1) return nullptr;
+    jstring jpath = env->NewStringUTF(path);
+    jobject loc = env->NewObject((jclass)rlCls, ctor1, jpath);
+    env->DeleteLocalRef(jpath);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
+    return loc;
+}
+
 static bool BindMcTexture(JNIEnv* env, const char* path) {
     if (!env || !path) return false;
     JniOk(env);
-    jobject mc = Minecraft::GetTheMinecraft(env);
-    if (!mc) return false;
-    Klass* mcCls = g_Instance->FindClass(Mapper::Get("net/minecraft/client/Minecraft"));
-    if (!mcCls) return false;
-    Field* fEng = mcCls->GetField(env, Mapper::Get("renderEngine").c_str(),
-        Mapper::Get("net/minecraft/client/renderer/texture/TextureManager", 2).c_str());
-    if (env->ExceptionCheck()) { env->ExceptionClear(); return false; }
-    if (!fEng) return false;
-    jobject tm = fEng->GetObjectField(env, mc);
+    jobject tm = GetTextureManager(env);
     if (!tm) return false;
-    Klass* rlCls = g_Instance->FindClass(Mapper::Get("net/minecraft/util/ResourceLocation"));
-    if (!rlCls) { env->DeleteLocalRef(tm); return false; }
-    jmethodID ctor = env->GetMethodID((jclass)rlCls, "<init>", "(Ljava/lang/String;)V");
-    if (env->ExceptionCheck()) { env->ExceptionClear(); ctor = nullptr; }
-    if (!ctor) { env->DeleteLocalRef(tm); return false; }
-    jstring jpath = env->NewStringUTF(path);
-    jobject loc = env->NewObject((jclass)rlCls, ctor, jpath);
-    env->DeleteLocalRef(jpath);
-    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(tm); return false; }
+    jobject loc = MakeResourceLocation(env, path);
     if (!loc) { env->DeleteLocalRef(tm); return false; }
     Klass* tmCls = g_Instance->FindClass(Mapper::Get("net/minecraft/client/renderer/texture/TextureManager"));
     if (!tmCls) { env->DeleteLocalRef(loc); env->DeleteLocalRef(tm); return false; }
@@ -171,6 +324,164 @@ static void DrawTexturedQuad(float x, float y, float sz) {
     glTexCoord2f(1.f, 1.f); glVertex2f(x + sz, y + sz);
     glTexCoord2f(0.f, 1.f); glVertex2f(x, y + sz);
     glEnd();
+}
+
+static jobject EnsureRenderItem(JNIEnv* env) {
+    static jobject s_ri = nullptr;
+    if (s_ri) return s_ri;
+    jobject mc = Minecraft::GetTheMinecraft(env);
+    if (!mc) return nullptr;
+    Klass* mcCls = g_Instance->FindClass(Mapper::Get("net/minecraft/client/Minecraft"));
+    if (mcCls) {
+        std::string riSig = Mapper::Get("net/minecraft/client/renderer/entity/RenderItem", 3);
+        Method* getRi = mcCls->GetMethod(env, Mapper::Get("getRenderItem").c_str(), riSig.c_str());
+        if (env->ExceptionCheck()) { env->ExceptionClear(); getRi = nullptr; }
+        if (getRi) {
+            jobject ri = getRi->CallObjectMethod(env, mc);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); ri = nullptr; }
+            if (ri) s_ri = env->NewGlobalRef(ri);
+            if (ri) env->DeleteLocalRef(ri);
+        }
+        if (!s_ri) {
+            Field* f = mcCls->GetField(env, Mapper::Get("mcRenderItem").c_str(),
+                Mapper::Get("net/minecraft/client/renderer/entity/RenderItem", 2).c_str());
+            if (env->ExceptionCheck()) { env->ExceptionClear(); f = nullptr; }
+            if (f) {
+                jobject ri = f->GetObjectField(env, mc);
+                if (ri) s_ri = env->NewGlobalRef(ri);
+                if (ri) env->DeleteLocalRef(ri);
+            }
+        }
+    }
+    env->DeleteLocalRef(mc);
+    if (!s_ri) {
+        Klass* riCls = g_Instance->FindClass(Mapper::Get("net/minecraft/client/renderer/entity/RenderItem"));
+        if (riCls) {
+            jmethodID ctor = env->GetMethodID((jclass)riCls, "<init>", "()V");
+            if (env->ExceptionCheck()) { env->ExceptionClear(); ctor = nullptr; }
+            if (ctor) {
+                jobject ri = env->NewObject((jclass)riCls, ctor);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); ri = nullptr; }
+                if (ri) {
+                    s_ri = env->NewGlobalRef(ri);
+                    env->DeleteLocalRef(ri);
+                }
+            }
+        }
+    }
+    return s_ri;
+}
+
+static bool DrawStackWithRenderItem(JNIEnv* env, jobject stack, float x, float y, float sz) {
+    if (!env || !stack) return false;
+    jobject ri = EnsureRenderItem(env);
+    if (!ri) return false;
+    Klass* riCls = (Klass*)env->GetObjectClass(ri);
+    if (!riCls) return false;
+    std::string stackSig = Mapper::Get("net/minecraft/item/ItemStack", 2);
+    std::string fontSig = Mapper::Get("net/minecraft/client/gui/FontRenderer", 2);
+    std::string tmSig = Mapper::Get("net/minecraft/client/renderer/texture/TextureManager", 2);
+    std::string name = Mapper::Get("renderItemAndEffectIntoGUI");
+    Method* m18 = riCls->GetMethod(env, name.c_str(), ("(" + stackSig + "II)V").c_str());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); m18 = nullptr; }
+    Method* m17 = nullptr;
+    if (!m18)
+        m17 = riCls->GetMethod(env, name.c_str(), ("(" + fontSig + tmSig + stackSig + "II)V").c_str());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); m17 = nullptr; }
+    env->DeleteLocalRef((jclass)riCls);
+    if (!m18 && !m17) return false;
+
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glTranslatef(x, y, 0.f);
+    glScalef(sz / 16.f, sz / 16.f, 1.f);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    if (m18) {
+        m18->CallVoidMethod(env, ri, false, stack, 0, 0);
+    } else {
+        jobject font = Minecraft::GetFontRenderer(env);
+        jobject tm = GetTextureManager(env);
+        if (font && tm)
+            m17->CallVoidMethod(env, ri, false, font, tm, stack, 0, 0);
+        if (font) env->DeleteLocalRef(font);
+        if (tm) env->DeleteLocalRef(tm);
+    }
+    bool ok = !env->ExceptionCheck();
+    if (!ok) env->ExceptionClear();
+
+    glMatrixMode(GL_MODELVIEW);
+    glPopMatrix();
+    glPopAttrib();
+    return ok;
+}
+
+static void DrawPotionFallback(JNIEnv* env, float x, float y, float sz, bool splash, int tintRgb) {
+    const char* base = PotionTexturePath(splash);
+    if (env && base && BindMcTexture(env, base)) {
+        glEnable(GL_TEXTURE_2D);
+        glEnable(GL_ALPHA_TEST);
+        glAlphaFunc(GL_GREATER, 0.001f);
+        glColor4f(1.f, 1.f, 1.f, 1.f);
+        DrawTexturedQuad(x, y, sz);
+        if (BindMcTexture(env, "textures/items/potion_overlay.png")) {
+            int rgb = tintRgb >= 0 ? tintRgb : 0x385DC6;
+            glColor4f(((rgb >> 16) & 255) / 255.f, ((rgb >> 8) & 255) / 255.f, (rgb & 255) / 255.f, 1.f);
+            DrawTexturedQuad(x, y, sz);
+            glColor4f(1.f, 1.f, 1.f, 1.f);
+        }
+        glDisable(GL_ALPHA_TEST);
+        glDisable(GL_TEXTURE_2D);
+    }
+}
+
+static bool DrawItemIcon(JNIEnv* env, float x, float y, float sz, const PespSlot& slot, ImU32 fallbackCol) {
+    if (slot.stackRef && DrawStackWithRenderItem(env, slot.stackRef, x, y, sz))
+        return true;
+
+    if (slot.itemId == 373) {
+        DrawPotionFallback(env, x, y, sz, slot.splash, slot.tintRgb);
+        return true;
+    }
+
+    const char* path = ItemTexturePath(slot.itemId);
+    if (env && path && BindMcTexture(env, path)) {
+        glEnable(GL_TEXTURE_2D);
+        glEnable(GL_ALPHA_TEST);
+        glAlphaFunc(GL_GREATER, 0.001f);
+        glColor4f(1.f, 1.f, 1.f, 1.f);
+        DrawTexturedQuad(x, y, sz);
+        if (slot.enchanted) {
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+            float t = (float)(GetTickCount() % 2000) / 2000.f;
+            float pulse = 0.3f + 0.15f * sinf(t * 6.2831853f);
+            glColor4f(0.5f, 0.2f, 1.f, pulse);
+            DrawTexturedQuad(x, y, sz);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glColor4f(1.f, 1.f, 1.f, 1.f);
+        }
+        glDisable(GL_ALPHA_TEST);
+        glDisable(GL_TEXTURE_2D);
+        return true;
+    }
+
+    float c[4] = {
+        ((fallbackCol >> IM_COL32_R_SHIFT) & 0xFF) / 255.f,
+        ((fallbackCol >> IM_COL32_G_SHIFT) & 0xFF) / 255.f,
+        ((fallbackCol >> IM_COL32_B_SHIFT) & 0xFF) / 255.f,
+        1.f
+    };
+    glDisable(GL_TEXTURE_2D);
+    glColor4f(c[0], c[1], c[2], 1.f);
+    glBegin(GL_QUADS);
+    glVertex2f(x, y); glVertex2f(x + sz, y);
+    glVertex2f(x + sz, y + sz); glVertex2f(x, y + sz);
+    glEnd();
+    return false;
 }
 
 static const char* EnchantAbbrev(int id) {
@@ -240,8 +551,158 @@ static ImU32 MaterialColor(int id) {
 static void FillEnchants(ItemStack* st, JNIEnv* env, const int* ids, int n, std::vector<PespEnch>& out) {
     for (int i = 0; i < n; i++) {
         int lvl = st->GetEnchantmentLevel(ids[i], env);
-        if (lvl > 0) out.push_back({ ids[i], lvl });
+        JniOk(env);
+        if (lvl > 0) {
+            bool exists = false;
+            for (auto& e : out) if (e.id == ids[i]) { exists = true; break; }
+            if (!exists) out.push_back({ ids[i], lvl });
+        }
     }
+}
+
+static void FillEnchantsFromNbt(ItemStack* st, JNIEnv* env, std::vector<PespEnch>& out) {
+    Klass* stackCls = g_Instance->FindClass(Mapper::Get("net/minecraft/item/ItemStack"));
+    if (!stackCls) return;
+    std::string listSig = Mapper::Get("net/minecraft/nbt/NBTTagList", 3);
+    Method* getList = stackCls->GetMethod(env, Mapper::Get("getEnchantmentTagList").c_str(), listSig.c_str());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); getList = nullptr; }
+    if (!getList) return;
+    jobject list = getList->CallObjectMethod(env, (jobject)st);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+    if (!list) return;
+    Klass* listCls = (Klass*)env->GetObjectClass(list);
+    if (!listCls) { env->DeleteLocalRef(list); return; }
+    Method* tagCount = listCls->GetMethod(env, Mapper::Get("tagCount").c_str(), "()I");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); tagCount = nullptr; }
+    std::string cmpSig = "(I)" + Mapper::Get("net/minecraft/nbt/NBTTagCompound", 2);
+    Method* getAt = listCls->GetMethod(env, Mapper::Get("getCompoundTagAt").c_str(), cmpSig.c_str());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); getAt = nullptr; }
+    env->DeleteLocalRef((jclass)listCls);
+    if (!tagCount || !getAt) { env->DeleteLocalRef(list); return; }
+    int n = tagCount->CallIntMethod(env, list);
+    JniOk(env);
+    Klass* cmpCls = g_Instance->FindClass(Mapper::Get("net/minecraft/nbt/NBTTagCompound"));
+    Method* getShort = cmpCls ? cmpCls->GetMethod(env, "getShort", "(Ljava/lang/String;)S") : nullptr;
+    if (env->ExceptionCheck()) { env->ExceptionClear(); getShort = nullptr; }
+    jstring idKey = env->NewStringUTF("id");
+    jstring lvlKey = env->NewStringUTF("lvl");
+    for (int i = 0; i < n && getShort; i++) {
+        jobject tag = getAt->CallObjectMethod(env, list, false, i);
+        JniOk(env);
+        if (!tag) continue;
+        int id = (short)env->CallShortMethod(tag, (jmethodID)getShort, idKey);
+        JniOk(env);
+        int lvl = (short)env->CallShortMethod(tag, (jmethodID)getShort, lvlKey);
+        JniOk(env);
+        env->DeleteLocalRef(tag);
+        if (lvl > 0) {
+            bool exists = false;
+            for (auto& e : out) if (e.id == id) { exists = true; break; }
+            if (!exists) out.push_back({ id, lvl });
+        }
+    }
+    env->DeleteLocalRef(idKey);
+    env->DeleteLocalRef(lvlKey);
+    env->DeleteLocalRef(list);
+}
+
+static void ReleaseSlot(JNIEnv* env, PespSlot& s) {
+    if (s.stackRef && env) {
+        env->DeleteGlobalRef(s.stackRef);
+        s.stackRef = nullptr;
+    }
+}
+
+static void ReleasePlayers(JNIEnv* env) {
+    for (auto& p : s_players) {
+        for (int i = 0; i < 4; i++) ReleaseSlot(env, p.armor[i]);
+        ReleaseSlot(env, p.held);
+        for (auto& pot : p.invPots) ReleaseSlot(env, pot);
+    }
+}
+
+static int TintFromPotionName(const std::string& raw) {
+    std::string n = raw;
+    for (char& c : n) {
+        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+    }
+    if (n.find("heal") != std::string::npos || n.find("health") != std::string::npos
+        || n.find("soin") != std::string::npos || n.find("instant health") != std::string::npos)
+        return 0xF82423;
+    if (n.find("poison") != std::string::npos) return 0x4E9331;
+    if (n.find("slow") != std::string::npos) return 0x5A6C81;
+    if (n.find("swift") != std::string::npos || n.find("speed") != std::string::npos) return 0x7CAFC6;
+    if (n.find("strength") != std::string::npos || n.find("force") != std::string::npos) return 0x932423;
+    if (n.find("regen") != std::string::npos) return 0xCD5CAB;
+    if (n.find("fire") != std::string::npos) return 0xE49A3A;
+    if (n.find("night") != std::string::npos || n.find("vision") != std::string::npos) return 0x1F1FA1;
+    if (n.find("invis") != std::string::npos) return 0x7F8392;
+    if (n.find("weak") != std::string::npos) return 0x484D48;
+    if (n.find("harm") != std::string::npos) return 0x430A09;
+    if (n.find("jump") != std::string::npos || n.find("leap") != std::string::npos) return 0x22FF4C;
+    if (n.find("breath") != std::string::npos) return 0x2E5299;
+    if (n.find("wither") != std::string::npos) return 0x352A27;
+    return 0;
+}
+
+static bool NameLooksSplash(const std::string& raw) {
+    std::string n = raw;
+    for (char& c : n) {
+        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+    }
+    return n.find("splash") != std::string::npos
+        || n.find("jetable") != std::string::npos
+        || n.find("throwable") != std::string::npos
+        || n.find("splashable") != std::string::npos;
+}
+
+static void ResolvePotionVisual(JNIEnv* env, jobject stack, PespSlot& s) {
+    s.splash = (s.meta & 16384) != 0;
+    s.tintRgb = PotionLiquidColor(s.meta);
+
+    Klass* potCls = g_Instance->FindClass(Mapper::Get("net/minecraft/item/ItemPotion"));
+    if (potCls) {
+        Method* isSplash = potCls->GetMethod(env, Mapper::Get("isSplash").c_str(), "(I)Z", true);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); isSplash = nullptr; }
+        if (isSplash) {
+            bool v = isSplash->CallBoolMethod(env, potCls, true, s.meta);
+            JniOk(env);
+            if (v) s.splash = true;
+        }
+        jobject item = stack ? ((ItemStack*)stack)->GetItem(env) : nullptr;
+        JniOk(env);
+        if (item) {
+            Method* gcd = potCls->GetMethod(env, Mapper::Get("getColorFromDamage").c_str(), "(I)I");
+            JniOk(env);
+            if (gcd) {
+                int c = gcd->CallIntMethod(env, item, false, s.meta);
+                JniOk(env);
+                if (c) s.tintRgb = c;
+            }
+            std::string sig = "(" + Mapper::Get("net/minecraft/item/ItemStack", 2) + "I)I";
+            Method* gcis = potCls->GetMethod(env, Mapper::Get("getColorFromItemStack").c_str(), sig.c_str());
+            JniOk(env);
+            if (gcis && stack) {
+                int c = gcis->CallIntMethod(env, item, false, stack, 0);
+                JniOk(env);
+                if (c && c != 0xFFFFFF && c != 16777215) s.tintRgb = c;
+            }
+            env->DeleteLocalRef(item);
+        }
+    }
+
+    std::string name;
+    if (stack) {
+        name = ((ItemStack*)stack)->GetDisplayName(env);
+        JniOk(env);
+    }
+    if (NameLooksSplash(name)) s.splash = true;
+    int named = TintFromPotionName(name);
+    if (named && (s.meta == 0 || s.tintRgb == 0x385DC6 || s.tintRgb == PotionLiquidColor(0)))
+        s.tintRgb = named;
+    else if (named && s.tintRgb < 0)
+        s.tintRgb = named;
+    if (s.tintRgb < 0) s.tintRgb = PotionLiquidColor(s.meta);
 }
 
 static PespSlot ReadStack(jobject stackObj, JNIEnv* env, bool weapon) {
@@ -250,55 +711,200 @@ static PespSlot ReadStack(jobject stackObj, JNIEnv* env, bool weapon) {
     auto* st = (ItemStack*)stackObj;
     s.itemId = st->GetItemId(env);
     JniOk(env);
+    if (s.itemId < 0) s.itemId = 0;
     s.meta = st->GetMetadata(env);
     JniOk(env);
     s.enchanted = st->IsEnchanted(env);
     JniOk(env);
     s.count = st->GetStackSize(env);
     JniOk(env);
-    if (s.enchanted) {
-        if (weapon) FillEnchants(st, env, kWeaponEnch, (int)(sizeof(kWeaponEnch) / sizeof(kWeaponEnch[0])), s.enchants);
-        else FillEnchants(st, env, kArmorEnch, (int)(sizeof(kArmorEnch) / sizeof(kArmorEnch[0])), s.enchants);
+    if (weapon || IsToolOrWeapon(s.itemId)) {
+        FillEnchants(st, env, kWeaponEnch, (int)(sizeof(kWeaponEnch) / sizeof(kWeaponEnch[0])), s.enchants);
+        FillEnchants(st, env, kToolEnch, (int)(sizeof(kToolEnch) / sizeof(kToolEnch[0])), s.enchants);
+    } else if (IsArmorItem(s.itemId)) {
+        FillEnchants(st, env, kArmorEnch, (int)(sizeof(kArmorEnch) / sizeof(kArmorEnch[0])), s.enchants);
+    } else {
+        FillEnchants(st, env, kWeaponEnch, (int)(sizeof(kWeaponEnch) / sizeof(kWeaponEnch[0])), s.enchants);
+        FillEnchants(st, env, kArmorEnch, (int)(sizeof(kArmorEnch) / sizeof(kArmorEnch[0])), s.enchants);
     }
+    FillEnchantsFromNbt(st, env, s.enchants);
+    if (!s.enchants.empty()) s.enchanted = true;
+    std::string potCls = Mapper::Get("net/minecraft/item/ItemPotion");
+    if (s.itemId == 373 || (!potCls.empty() && st->Is(potCls.c_str(), env))) {
+        s.itemId = 373;
+        ResolvePotionVisual(env, stackObj, s);
+        JniOk(env);
+    }
+    s.stackRef = env->NewGlobalRef(stackObj);
     return s;
+}
+
+static int ReadIntOn(JNIEnv* env, jobject obj, const char* field, const char* getter) {
+    if (!obj) return 0;
+    jclass cls = env->GetObjectClass(obj);
+    int v = 0;
+    bool ok = false;
+    while (cls && !ok) {
+        if (field && field[0]) {
+            jfieldID f = env->GetFieldID(cls, field, "I");
+            if (env->ExceptionCheck()) { env->ExceptionClear(); f = nullptr; }
+            if (f) {
+                v = env->GetIntField(obj, f);
+                JniOk(env);
+                ok = true;
+            }
+        }
+        if (!ok && getter && getter[0]) {
+            jmethodID m = env->GetMethodID(cls, getter, "()I");
+            if (env->ExceptionCheck()) { env->ExceptionClear(); m = nullptr; }
+            if (m) {
+                v = env->CallIntMethod(obj, m);
+                JniOk(env);
+                ok = true;
+            }
+        }
+        jclass super = env->GetSuperclass(cls);
+        env->DeleteLocalRef(cls);
+        cls = super;
+    }
+    if (cls) env->DeleteLocalRef(cls);
+    return v;
+}
+
+static void PushPotionFromEffect(JNIEnv* env, jobject pe, std::vector<PespPot>& out) {
+    if (!pe) return;
+    int id = ReadIntOn(env, pe, "potionID", Mapper::Get("getPotionID").c_str());
+    if (!id) id = ReadIntOn(env, pe, "potionID", "getPotionID");
+    int dur = ReadIntOn(env, pe, "duration", Mapper::Get("getDuration").c_str());
+    if (!dur) dur = ReadIntOn(env, pe, "duration", "getDuration");
+    int amp = ReadIntOn(env, pe, "amplifier", Mapper::Get("getAmplifier").c_str());
+    if (!amp) amp = ReadIntOn(env, pe, "amplifier", "getAmplifier");
+    if (id <= 0) return;
+    for (auto& e : out) if (e.id == id) return;
+    out.push_back({ id, dur, amp });
+}
+
+static void CollectFromIterator(JNIEnv* env, jobject iter, std::vector<PespPot>& out) {
+    if (!iter) return;
+    jclass ic = env->FindClass("java/util/Iterator");
+    if (!ic) return;
+    jmethodID hasN = env->GetMethodID(ic, "hasNext", "()Z");
+    jmethodID next = env->GetMethodID(ic, "next", "()Ljava/lang/Object;");
+    env->DeleteLocalRef(ic);
+    if (!hasN || !next) return;
+    while (env->CallBooleanMethod(iter, hasN)) {
+        JniOk(env);
+        jobject pe = env->CallObjectMethod(iter, next);
+        JniOk(env);
+        if (pe) {
+            PushPotionFromEffect(env, pe, out);
+            env->DeleteLocalRef(pe);
+        }
+    }
+}
+
+static void CollectFromCollection(JNIEnv* env, jobject coll, std::vector<PespPot>& out) {
+    if (!coll) return;
+    jclass cc = env->GetObjectClass(coll);
+    if (!cc) return;
+    jmethodID toArr = env->GetMethodID(cc, "toArray", "()[Ljava/lang/Object;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); toArr = nullptr; }
+    if (toArr) {
+        jobject arrObj = env->CallObjectMethod(coll, toArr);
+        JniOk(env);
+        env->DeleteLocalRef(cc);
+        if (!arrObj) return;
+        auto arr = (jobjectArray)arrObj;
+        const jsize n = env->GetArrayLength(arr);
+        for (jsize i = 0; i < n; i++) {
+            jobject pe = env->GetObjectArrayElement(arr, i);
+            if (pe) {
+                PushPotionFromEffect(env, pe, out);
+                env->DeleteLocalRef(pe);
+            }
+        }
+        env->DeleteLocalRef(arrObj);
+        return;
+    }
+    jmethodID iterId = env->GetMethodID(cc, "iterator", "()Ljava/util/Iterator;");
+    env->DeleteLocalRef(cc);
+    JniOk(env);
+    if (!iterId) return;
+    jobject iter = env->CallObjectMethod(coll, iterId);
+    JniOk(env);
+    if (!iter) return;
+    CollectFromIterator(env, iter, out);
+    env->DeleteLocalRef(iter);
 }
 
 static void CollectPotions(JNIEnv* env, jobject entity, std::vector<PespPot>& out) {
     if (!env || !entity) return;
     JniOk(env);
-    Klass* living = (Klass*)env->GetObjectClass(entity);
-    if (!living) return;
-    Method* m = living->GetMethod(env, Mapper::Get("getActivePotionEffects").c_str(), "()Ljava/util/Collection;");
-    env->DeleteLocalRef((jclass)living);
-    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
-    if (!m) return;
-    jobject coll = m->CallObjectMethod(env, entity);
-    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
-    if (!coll) return;
-    jclass cc = env->FindClass("java/util/Collection");
-    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(coll); return; }
-    if (!cc) { env->DeleteLocalRef(coll); return; }
-    jmethodID iterId = env->GetMethodID(cc, "iterator", "()Ljava/util/Iterator;");
-    env->DeleteLocalRef(cc);
-    jobject iter = iterId ? env->CallObjectMethod(coll, iterId) : nullptr;
-    env->DeleteLocalRef(coll);
-    if (!iter) return;
-    jclass ic = env->FindClass("java/util/Iterator");
-    if (!ic) { env->DeleteLocalRef(iter); return; }
-    jmethodID hasN = env->GetMethodID(ic, "hasNext", "()Z");
-    jmethodID next = env->GetMethodID(ic, "next", "()Ljava/lang/Object;");
-    env->DeleteLocalRef(ic);
-    Klass* peCls = g_Instance->FindClass(Mapper::Get("net/minecraft/potion/PotionEffect"));
-    Method* gp = peCls ? peCls->GetMethod(env, Mapper::Get("getPotionID").c_str(), "()I") : nullptr;
-    Method* gd = peCls ? peCls->GetMethod(env, Mapper::Get("getDuration").c_str(), "()I") : nullptr;
-    Method* ga = peCls ? peCls->GetMethod(env, Mapper::Get("getAmplifier").c_str(), "()I") : nullptr;
-    while (hasN && next && env->CallBooleanMethod(iter, hasN)) {
-        jobject pe = env->CallObjectMethod(iter, next);
-        if (!pe || !gp || !gd || !ga) { if (pe) env->DeleteLocalRef(pe); continue; }
-        out.push_back({ gp->CallIntMethod(env, pe), gd->CallIntMethod(env, pe), ga->CallIntMethod(env, pe) });
-        env->DeleteLocalRef(pe);
+
+    auto tryMethodOn = [&](Klass* cls) {
+        if (!cls) return;
+        Method* m = cls->GetMethod(env, Mapper::Get("getActivePotionEffects").c_str(), "()Ljava/util/Collection;");
+        JniOk(env);
+        if (!m) m = cls->GetMethod(env, Mapper::Get("getActivePotionEffects").c_str(), "()Ljava/util/List;");
+        JniOk(env);
+        if (!m) return;
+        jobject coll = m->CallObjectMethod(env, entity);
+        JniOk(env);
+        if (coll) {
+            CollectFromCollection(env, coll, out);
+            env->DeleteLocalRef(coll);
+        }
+    };
+
+    tryMethodOn(g_Instance->FindClass(Mapper::Get("net/minecraft/entity/EntityLivingBase")));
+    if (out.empty()) {
+        jclass oc = env->GetObjectClass(entity);
+        tryMethodOn((Klass*)oc);
+        if (oc) env->DeleteLocalRef(oc);
     }
-    env->DeleteLocalRef(iter);
+
+    if (out.empty()) {
+        jclass cls = env->GetObjectClass(entity);
+        jfieldID mapF = nullptr;
+        while (cls && !mapF) {
+            std::string name = Mapper::Get("activePotionsMap");
+            mapF = env->GetFieldID(cls, name.empty() ? "activePotionsMap" : name.c_str(), "Ljava/util/Map;");
+            if (env->ExceptionCheck()) { env->ExceptionClear(); mapF = nullptr; }
+            if (!mapF) {
+                mapF = env->GetFieldID(cls, "activePotionsMap", "Ljava/util/HashMap;");
+                if (env->ExceptionCheck()) { env->ExceptionClear(); mapF = nullptr; }
+            }
+            jclass super = env->GetSuperclass(cls);
+            env->DeleteLocalRef(cls);
+            cls = super;
+        }
+        if (cls) env->DeleteLocalRef(cls);
+        if (mapF) {
+            jobject mapObj = env->GetObjectField(entity, mapF);
+            JniOk(env);
+            if (mapObj) {
+                jclass mc = env->FindClass("java/util/Map");
+                jmethodID values = mc ? env->GetMethodID(mc, "values", "()Ljava/util/Collection;") : nullptr;
+                if (mc) env->DeleteLocalRef(mc);
+                jobject vals = values ? env->CallObjectMethod(mapObj, values) : nullptr;
+                JniOk(env);
+                if (vals) {
+                    CollectFromCollection(env, vals, out);
+                    env->DeleteLocalRef(vals);
+                }
+                env->DeleteLocalRef(mapObj);
+            }
+        }
+    }
+
+    if (out.empty()) {
+        auto* p = (Player*)entity;
+        for (int id = 1; id <= 23; id++) {
+            if (!p->IsPotionActive(id, env)) continue;
+            JniOk(env);
+            out.push_back({ id, 0, 0 });
+        }
+    }
 }
 
 static bool W2S(const Vec3& w, Vec2& s) {
@@ -311,6 +917,7 @@ void PlayerEsp::OnRender(JNIEnv* env) {
 }
 
 static void CollectPlayerEsp(JNIEnv* env) {
+    ReleasePlayers(env);
     s_players.clear();
     if (!env) return;
     JniOk(env);
@@ -380,11 +987,15 @@ static void CollectPlayerEsp(JNIEnv* env) {
         pd.limbSwingAmount = lsaPrev + (lsaNow - lsaPrev) * partial;
         pd.limbSwing = ReadFloat(env, e, "limbSwing") - lsaNow * (1.f - partial);
 
-        int gapples = 0, pots = 0;
+        int gapples = 0;
+        int currentSlot = -1;
+        std::unordered_map<int, int> potsByMeta;
         jobject invObj = ent->GetInventoryPlayer(env);
         JniOk(env);
-        if (invObj) {
-            auto* inv = (InventoryPlayer*)invObj;
+        InventoryPlayer* inv = invObj ? (InventoryPlayer*)invObj : nullptr;
+        if (inv) {
+            currentSlot = inv->GetSlot(env);
+            JniOk(env);
             for (int slot = 0; slot < 36; slot++) {
                 jobject st = inv->GetStackInSlot(slot, env);
                 JniOk(env);
@@ -394,28 +1005,42 @@ static void CollectPlayerEsp(JNIEnv* env) {
                 JniOk(env);
                 int n = stack->GetStackSize(env);
                 JniOk(env);
-                if (id == 322 && n > 0) gapples += n;
-                else if (id == 373 && n > 0) pots += n;
+                int meta = stack->GetMetadata(env);
+                JniOk(env);
+                if (slot != currentSlot) {
+                    if (id == 322 && n > 0) gapples += n;
+                    else if (id == 373 && n > 0) potsByMeta[meta] += n;
+                }
                 env->DeleteLocalRef(st);
             }
-            if (PlayerEspSettings::armor) {
-                for (int i = 0; i < 4; i++) {
-                    jobject st = inv->GetStackInSlot(36 + i, env);
+        }
+        if (PlayerEspSettings::armor) {
+            for (int i = 0; i < 4; i++) {
+                jobject st = GetArmorStack(env, ent, inv, i);
+                JniOk(env);
+                if (st) {
+                    pd.armor[i] = ReadStack(st, env, false);
                     JniOk(env);
-                    if (st) {
-                        pd.armor[i] = ReadStack(st, env, false);
-                        JniOk(env);
-                        env->DeleteLocalRef(st);
-                    }
+                    env->DeleteLocalRef(st);
                 }
             }
-            env->DeleteLocalRef(invObj);
         }
+        if (invObj) env->DeleteLocalRef(invObj);
         pd.gappleCount = gapples;
-        pd.potionInvCount = pots;
+        if (PlayerEspSettings::potions) {
+            for (auto& kv : potsByMeta) {
+                PespSlot pot;
+                pot.itemId = 373;
+                pot.meta = kv.first;
+                pot.count = kv.second;
+                ResolvePotionVisual(env, nullptr, pot);
+                pd.invPots.push_back(std::move(pot));
+                pd.potionInvCount += kv.second;
+            }
+        }
 
         if (PlayerEspSettings::heldItem) {
-            jobject held = ent->GetHeldItem(env);
+            jobject held = GetHeldStack(env, ent);
             JniOk(env);
             if (held) {
                 pd.held = ReadStack(held, env, true);
@@ -424,10 +1049,8 @@ static void CollectPlayerEsp(JNIEnv* env) {
             }
         }
 
-        if (PlayerEspSettings::potions) {
-            CollectPotions(env, e, pd.potions);
-            JniOk(env);
-        }
+        CollectPotions(env, e, pd.potions);
+        JniOk(env);
 
         s_players.push_back(std::move(pd));
         env->DeleteLocalRef(e);
@@ -595,27 +1218,96 @@ static void RenderOutline2D(ImDrawList* dl, const Vec2& head, const Vec2& feet) 
 
 static std::string EnchString(const std::vector<PespEnch>& e) {
     std::string s;
-    for (auto& x : e) { s += EnchantAbbrev(x.id); s += std::to_string(x.lvl); }
+    for (size_t i = 0; i < e.size(); i++) {
+        if (i) s += ' ';
+        s += EnchantAbbrev(e[i].id);
+        s += std::to_string(e[i].lvl);
+    }
     return s;
+}
+
+static bool ShowCount(const PespSlot& slot) {
+    if (slot.count <= 0) return false;
+    if (slot.itemId == 373 || slot.itemId == 322 || slot.itemId == 368) return true;
+    return slot.count > 1;
+}
+
+static void DrawSlotIcon(JNIEnv* env, ImDrawList* dl, float x, float y, float sz, const PespSlot& slot, ImU32 col) {
+    const ImVec2 a(x, y), b(x + sz, y + sz);
+    if (slot.itemId == 373) {
+        ImTextureID bottle = GetMcTexId(env, PotionTexturePath(slot.splash));
+        if (bottle)
+            dl->AddImage(bottle, a, b, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE);
+        else
+            dl->AddRectFilled(a, b, col, 2.f);
+        ImTextureID overlay = GetMcTexId(env, "textures/items/potion_overlay.png");
+        int rgb = slot.tintRgb >= 0 ? slot.tintRgb : PotionLiquidColor(slot.meta);
+        if (overlay) {
+            dl->AddImage(overlay, a, b, ImVec2(0, 0), ImVec2(1, 1),
+                IM_COL32((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 255));
+        } else {
+            dl->AddRectFilled(a, b, IM_COL32((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 140), 2.f);
+        }
+        return;
+    }
+
+    const char* path = ItemTexturePath(slot.itemId);
+    ImTextureID tex = path ? GetMcTexId(env, path) : (ImTextureID)0;
+    if (tex) {
+        dl->AddImage(tex, a, b, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE);
+        if (slot.enchanted) {
+            float t = (float)(GetTickCount() % 2000) / 2000.f;
+            int aPulse = (int)((0.25f + 0.2f * sinf(t * 6.2831853f)) * 255.f);
+            dl->AddRectFilled(a, b, IM_COL32(140, 60, 255, aPulse), 2.f);
+        }
+        return;
+    }
+
+    dl->AddRectFilled(a, b, col, 2.f);
+    dl->AddRect(a, b, IM_COL32(0, 0, 0, 180), 2.f);
+    const char* ab = ItemAbbrev(slot.itemId);
+    if (ab) {
+        float fs = (std::max)(8.f, sz * 0.35f);
+        ImVec2 ts = ImGui::CalcTextSize(ab);
+        float sc = fs / ImGui::GetFontSize();
+        dl->AddText(ImGui::GetFont(), fs,
+            ImVec2(x + (sz - ts.x * sc) * 0.5f, y + (sz - fs) * 0.5f),
+            IM_COL32(255, 255, 255, 255), ab);
+    }
 }
 
 static void RenderArmorHud(JNIEnv* env, ImDrawList* dl, float centerX, float nametagY, float scale, const PespPlayer& p) {
     const float s = scale * PlayerEspSettings::displayScale;
     const float enchFS = (std::max)(8.f * s, 6.f);
-    const float iconSz = (std::max)(16.f * s, 12.f);
-    const float slotGap = 3.f * s, padX = 5.f * s, padY = 1.5f * s;
-    struct Row { int itemId; int meta; std::string ench; ImU32 col; bool enchanted; };
+    const float iconSz = (std::max)(18.f * s, 14.f);
+    const float slotGap = 3.f * s, padX = 5.f * s, padY = 2.f * s;
+    struct Row {
+        const PespSlot* slot;
+        std::string ench;
+        ImU32 col;
+        int count;
+    };
     std::vector<Row> rows;
-    for (int i = 3; i >= 0; i--) {
-        if (p.armor[i].itemId < 0) continue;
-        rows.push_back({ p.armor[i].itemId, p.armor[i].meta, EnchString(p.armor[i].enchants), MaterialColor(p.armor[i].itemId), p.armor[i].enchanted });
+    if (PlayerEspSettings::armor) {
+        for (int i = 3; i >= 0; i--) {
+            if (p.armor[i].itemId < 0 && !p.armor[i].stackRef) continue;
+            rows.push_back({ &p.armor[i], EnchString(p.armor[i].enchants), MaterialColor(p.armor[i].itemId), p.armor[i].count });
+        }
     }
-    if (PlayerEspSettings::heldItem && p.held.itemId >= 0 && p.held.itemId != 322 && p.held.itemId != 373)
-        rows.push_back({ p.held.itemId, p.held.meta, EnchString(p.held.enchants), MaterialColor(p.held.itemId), p.held.enchanted });
-    if (PlayerEspSettings::gapple && p.gappleCount > 0)
-        rows.push_back({ 322, 0, "x" + std::to_string(p.gappleCount), IM_COL32(255, 180, 50, 255), false });
-    if (PlayerEspSettings::potions && p.potionInvCount > 0)
-        rows.push_back({ 373, 0, "x" + std::to_string(p.potionInvCount), IM_COL32(140, 80, 200, 255), false });
+    if (PlayerEspSettings::heldItem && (p.held.itemId >= 0 || p.held.stackRef))
+        rows.push_back({ &p.held, EnchString(p.held.enchants), MaterialColor(p.held.itemId), p.held.count });
+    PespSlot gappleSlot{};
+    if (PlayerEspSettings::gapple && p.gappleCount > 0) {
+        gappleSlot.itemId = 322;
+        gappleSlot.count = p.gappleCount;
+        rows.push_back({ &gappleSlot, "x" + std::to_string(p.gappleCount), IM_COL32(255, 180, 50, 255), p.gappleCount });
+    }
+    if (PlayerEspSettings::potions) {
+        for (const auto& pot : p.invPots) {
+            if (pot.itemId != 373 || pot.count <= 0) continue;
+            rows.push_back({ &pot, "x" + std::to_string(pot.count), IM_COL32(140, 80, 200, 255), pot.count });
+        }
+    }
     if (rows.empty()) return;
 
     bool anyEnch = false;
@@ -634,129 +1326,140 @@ static void RenderArmorHud(JNIEnv* env, ImDrawList* dl, float centerX, float nam
     }
     totalW += padX;
     const float enchH = anyEnch ? enchFS : 0.f;
-    const float barH = (std::max)(1.f, s);
+    const float barH = (std::max)(2.f, s);
     const float rowH = padY + enchH + iconSz + barH + padY;
     const float x0 = centerX - totalW * 0.5f;
-    const float y1 = nametagY - 2.f;
+    const float y1 = nametagY - 4.f;
     const float y0 = y1 - rowH;
     const float iconY = y0 + padY + enchH;
 
-    const ImGuiIO& io = ImGui::GetIO();
-    glPushAttrib(GL_ALL_ATTRIB_BITS);
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glOrtho(0.0, io.DisplaySize.x, io.DisplaySize.y, 0.0, -1.0, 1.0);
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glLoadIdentity();
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_LIGHTING);
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + totalW, y1), IM_COL32(0, 0, 0, 140), 4.f);
 
     float cur = x0 + padX;
+    float sc = enchFS / ImGui::GetFontSize();
     for (size_t i = 0; i < rows.size(); i++) {
         float ix = cur + (slotW[i] - iconSz) * 0.5f;
-        const char* path = (rows[i].itemId == 373) ? PotionTexturePath(rows[i].meta) : ItemTexturePath(rows[i].itemId);
-        if (env && path && BindMcTexture(env, path)) {
-            glEnable(GL_TEXTURE_2D);
-            glEnable(GL_ALPHA_TEST);
-            glAlphaFunc(GL_GREATER, 0.001f);
-            glColor4f(1.f, 1.f, 1.f, 1.f);
-            DrawTexturedQuad(ix, iconY, iconSz);
-            if (rows[i].enchanted) {
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-                float t = (float)(GetTickCount() % 2000) / 2000.f;
-                float pulse = 0.3f + 0.15f * sinf(t * 6.2831853f);
-                glColor4f(0.5f, 0.2f, 1.f, pulse);
-                DrawTexturedQuad(ix, iconY, iconSz);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            }
-            glDisable(GL_ALPHA_TEST);
-            glDisable(GL_TEXTURE_2D);
-        } else {
-            float c[4] = {
-                ((rows[i].col >> IM_COL32_R_SHIFT) & 0xFF) / 255.f,
-                ((rows[i].col >> IM_COL32_G_SHIFT) & 0xFF) / 255.f,
-                ((rows[i].col >> IM_COL32_B_SHIFT) & 0xFF) / 255.f,
-                1.f
-            };
-            glDisable(GL_TEXTURE_2D);
-            glColor4f(c[0], c[1], c[2], 1.f);
-            glBegin(GL_QUADS);
-            glVertex2f(ix, iconY); glVertex2f(ix + iconSz, iconY);
-            glVertex2f(ix + iconSz, iconY + iconSz); glVertex2f(ix, iconY + iconSz);
-            glEnd();
+        DrawSlotIcon(env, dl, ix, iconY, iconSz, *rows[i].slot, rows[i].col);
+        dl->AddRectFilled(ImVec2(ix, iconY + iconSz), ImVec2(ix + iconSz, iconY + iconSz + barH),
+            (rows[i].col & 0x00FFFFFF) | 0x8C000000);
+        if (!rows[i].ench.empty()) {
+            ImVec2 es = ImGui::CalcTextSize(rows[i].ench.c_str());
+            dl->AddText(ImGui::GetFont(), enchFS,
+                ImVec2(cur + (slotW[i] - es.x * sc) * 0.5f, iconY - enchFS),
+                IM_COL32(85, 255, 255, 255), rows[i].ench.c_str());
         }
-        float bc[4] = {
-            ((rows[i].col >> IM_COL32_R_SHIFT) & 0xFF) / 255.f,
-            ((rows[i].col >> IM_COL32_G_SHIFT) & 0xFF) / 255.f,
-            ((rows[i].col >> IM_COL32_B_SHIFT) & 0xFF) / 255.f,
-            0.55f
-        };
-        glDisable(GL_TEXTURE_2D);
-        glColor4f(bc[0], bc[1], bc[2], bc[3]);
-        glBegin(GL_QUADS);
-        glVertex2f(ix, iconY + iconSz); glVertex2f(ix + iconSz, iconY + iconSz);
-        glVertex2f(ix + iconSz, iconY + iconSz + barH); glVertex2f(ix, iconY + iconSz + barH);
-        glEnd();
+        if (rows[i].slot && ShowCount(*rows[i].slot) && rows[i].ench.find('x') != 0) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d", rows[i].count);
+            ImVec2 cs = ImGui::CalcTextSize(buf);
+            float cfs = (std::max)(8.f * s, 7.f);
+            float csc = cfs / ImGui::GetFontSize();
+            float tx = ix + iconSz - cs.x * csc - 1.f;
+            float ty = iconY + iconSz - cfs + 1.f;
+            dl->AddText(ImGui::GetFont(), cfs, ImVec2(tx + 1.f, ty + 1.f), IM_COL32(0, 0, 0, 220), buf);
+            dl->AddText(ImGui::GetFont(), cfs, ImVec2(tx, ty), IM_COL32(255, 255, 255, 255), buf);
+        }
         cur += slotW[i] + slotGap;
-    }
-
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
-    glPopAttrib();
-
-    if (anyEnch) {
-        cur = x0 + padX;
-        float sc = enchFS / ImGui::GetFontSize();
-        for (size_t i = 0; i < rows.size(); i++) {
-            if (!rows[i].ench.empty()) {
-                ImVec2 es = ImGui::CalcTextSize(rows[i].ench.c_str());
-                dl->AddText(ImGui::GetFont(), enchFS,
-                    ImVec2(cur + (slotW[i] - es.x * sc) * 0.5f, iconY - enchFS),
-                    IM_COL32(85, 255, 255, 255), rows[i].ench.c_str());
-            }
-            cur += slotW[i] + slotGap;
-        }
     }
 }
 
-static void RenderPotions(ImDrawList* dl, float centerX, float aboveY, float scale, const PespPlayer& p) {
+static int PotionIconIdx(int id) {
+    switch (id) {
+        case 1:  return 0;
+        case 2:  return 1;
+        case 3:  return 2;
+        case 4:  return 3;
+        case 5:  return 4;
+        case 8:  return 10;
+        case 9:  return 11;
+        case 10: return 7;
+        case 11: return 14;
+        case 12: return 15;
+        case 13: return 16;
+        case 14: return 8;
+        case 15: return 13;
+        case 16: return 12;
+        case 17: return 9;
+        case 18: return 5;
+        case 19: return 6;
+        case 20: return 17;
+        case 21: return 23;
+        case 22: return 18;
+        default: return -1;
+    }
+}
+
+static const char* AmpSuffix(int amp) {
+    switch (amp) {
+        case 1: return " II";
+        case 2: return " III";
+        case 3: return " IV";
+        case 4: return " V";
+        default: return "";
+    }
+}
+
+static void RenderPotions(JNIEnv* env, ImDrawList* dl, float centerX, float topY, float scale, const PespPlayer& p) {
     if (p.potions.empty()) return;
     const float s = scale * PlayerEspSettings::displayScale;
     const float fs = (std::max)(8.f * s, 6.f);
-    const float padX = 4.f * s, padY = 2.f * s, pillGap = 3.f * s;
-    std::vector<std::string> texts;
+    const float iconSz = (std::max)(fs * 1.35f, 12.f);
+    const float padX = 4.f * s, padY = 2.f * s, iconGap = 3.f * s, pillGap = 3.f * s;
+    ImTextureID iconTex = env ? GetMcTexId(env, "textures/gui/container/inventory.png") : (ImTextureID)0;
+
+    struct Pill { std::string text; int iconIdx; float w; };
+    std::vector<Pill> pills;
     float totalW = padX;
+    const float sc = fs / ImGui::GetFontSize();
     for (size_t i = 0; i < p.potions.size(); i++) {
-        char buf[48];
-        if (const char* n = PotionEffectName(p.potions[i].id))
-            snprintf(buf, sizeof(buf), "%s %s", n, FormatDuration(p.potions[i].duration).c_str());
-        else
-            snprintf(buf, sizeof(buf), "#%d %s", p.potions[i].id, FormatDuration(p.potions[i].duration).c_str());
-        texts.emplace_back(buf);
-        float w = ImGui::CalcTextSize(buf).x * (fs / ImGui::GetFontSize()) + padX * 2.f;
+        const PespPot& pot = p.potions[i];
+        char buf[64];
+        const char* n = PotionEffectName(pot.id);
+        const char* amp = AmpSuffix(pot.amp);
+        if (pot.duration > 0) {
+            if (n) snprintf(buf, sizeof(buf), "%s%s %s", n, amp, FormatDuration(pot.duration).c_str());
+            else snprintf(buf, sizeof(buf), "#%d%s %s", pot.id, amp, FormatDuration(pot.duration).c_str());
+        } else {
+            if (n) snprintf(buf, sizeof(buf), "%s%s", n, amp);
+            else snprintf(buf, sizeof(buf), "#%d%s", pot.id, amp);
+        }
+        float tw = ImGui::CalcTextSize(buf).x * sc;
+        int idx = PotionIconIdx(pot.id);
+        float w = ((idx >= 0 && iconTex) ? iconSz + iconGap : 0.f) + tw + padX;
         if (i) totalW += pillGap;
         totalW += w;
+        pills.push_back({ buf, idx, w });
     }
     totalW += padX;
-    const float pillH = fs + padY * 2.f;
-    const float x0 = centerX - totalW * 0.5f;
-    const float y1 = aboveY - 2.f;
-    const float y0 = y1 - pillH;
-    dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + totalW, y1), IM_COL32(0, 0, 0, 178), 3.f);
+    const float pillH = (std::max)(iconSz, fs) + padY * 2.f;
+    float x0 = centerX - totalW * 0.5f;
+    float y0 = topY;
+    const float dispW = ImGui::GetIO().DisplaySize.x;
+    const float dispH = ImGui::GetIO().DisplaySize.y;
+    if (y0 < 2.f) y0 = 2.f;
+    if (y0 + pillH > dispH - 2.f) y0 = dispH - 2.f - pillH;
+    if (x0 < 2.f) x0 = 2.f;
+    if (x0 + totalW > dispW - 2.f) x0 = dispW - 2.f - totalW;
+
+    dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + totalW, y0 + pillH), IM_COL32(0, 0, 0, 178), 3.f);
     float cur = x0 + padX;
-    float sc = fs / ImGui::GetFontSize();
-    for (size_t i = 0; i < texts.size(); i++) {
-        float tw = ImGui::CalcTextSize(texts[i].c_str()).x * sc;
-        dl->AddText(ImGui::GetFont(), fs, ImVec2(cur, y0 + padY), IM_COL32(230, 230, 230, 255), texts[i].c_str());
-        cur += tw + padX * 2.f + pillGap;
+    for (const auto& pill : pills) {
+        const float iconY = y0 + (pillH - iconSz) * 0.5f;
+        float textX = cur;
+        if (iconTex && pill.iconIdx >= 0) {
+            const int col = pill.iconIdx % 8;
+            const int row = pill.iconIdx / 8;
+            const float u0 = (col * 18.f) / 256.f;
+            const float v0 = (198.f + row * 18.f) / 256.f;
+            const float u1 = u0 + 18.f / 256.f;
+            const float v1 = v0 + 18.f / 256.f;
+            dl->AddImage(iconTex, ImVec2(cur, iconY), ImVec2(cur + iconSz, iconY + iconSz),
+                ImVec2(u0, v0), ImVec2(u1, v1));
+            textX = cur + iconSz + iconGap;
+        }
+        dl->AddText(ImGui::GetFont(), fs, ImVec2(textX, y0 + (pillH - fs) * 0.5f),
+            IM_COL32(230, 230, 230, 255), pill.text.c_str());
+        cur += pill.w + pillGap;
     }
 }
 
@@ -801,15 +1504,11 @@ void PlayerEsp::OnImGuiRender(JNIEnv* env) {
         if (PlayerEspSettings::skeleton)
             RenderSkeleton(dl, p);
 
-        float armorTop = nametag.y;
         if (PlayerEspSettings::armor || PlayerEspSettings::heldItem
             || (PlayerEspSettings::gapple && p.gappleCount > 0)
             || (PlayerEspSettings::potions && p.potionInvCount > 0)) {
             RenderArmorHud(env, dl, centerX, nametag.y, scale, p);
-            const float s = scale * PlayerEspSettings::displayScale;
-            armorTop = nametag.y - 2.f - ((std::max)(14.f * s, 10.f) + 8.f * s + 12.f);
         }
-        if (PlayerEspSettings::potions)
-            RenderPotions(dl, centerX, armorTop, scale, p);
+        RenderPotions(env, dl, centerX, nametag.y + 6.f, scale, p);
     }
 }

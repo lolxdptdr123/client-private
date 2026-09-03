@@ -48,6 +48,7 @@ public:
 	int GetTicksExisted(JNIEnv* env);
 	jobject GetBoundingBox(JNIEnv* env);
 	jobject GetHeldItem(JNIEnv *env);
+	jobject GetEquipmentInSlot(int slot, JNIEnv* env);
 	jobject GetInventoryPlayer(JNIEnv* env);
 	jobject GetOpenContainer(JNIEnv* env);
 	void CloseScreen(JNIEnv* env);
