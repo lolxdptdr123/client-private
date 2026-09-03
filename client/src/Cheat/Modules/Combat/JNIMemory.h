@@ -1,6 +1,9 @@
 #pragma once
 
 #include <jni.h>
+#include <string>
+#include "../../../Game/Mapper.h"
+#include "../../Hack.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // JNIMemory
@@ -74,89 +77,88 @@ namespace JNIMemory
         JNIEnv* env = GetEnvPublic();
         if (!env) return false;
 
-        // ── Minecraft ─────────────────────────────────────────────────────────
-        jclass clsMC = env->FindClass("net/minecraft/client/Minecraft");
+        auto findMc = [&](const char* key) -> jclass {
+            std::string n = Mapper::Get(key);
+            if (n.empty()) n = key;
+            Klass* k = g_Instance ? g_Instance->FindClass(n) : nullptr;
+            return k ? (jclass)k : nullptr;
+        };
+
+        jclass clsMC = findMc("net/minecraft/client/Minecraft");
         if (env->ExceptionCheck()) { env->ExceptionClear(); return false; }
         if (!clsMC) return false;
         s_classMC = (jclass)env->NewGlobalRef(clsMC);
-        env->DeleteLocalRef(clsMC);
 
-        s_fMC_instance = env->GetStaticFieldID(
-            s_classMC, "theMinecraft", "Lnet/minecraft/client/Minecraft;");
+        std::string nInst = Mapper::Get("theMinecraft");
+        std::string sInst = Mapper::Get("net/minecraft/client/Minecraft", 2);
+        s_fMC_instance = env->GetStaticFieldID(s_classMC, nInst.c_str(), sInst.c_str());
         if (env->ExceptionCheck()) { env->ExceptionClear(); s_fMC_instance = nullptr; }
 
-        s_fMC_thePlayer = env->GetFieldID(
-            s_classMC, "thePlayer",
-            "Lnet/minecraft/client/entity/EntityClientPlayerMP;");
+        std::string nPl = Mapper::Get("thePlayer");
+        std::string sMp = Mapper::Get("net/minecraft/client/entity/EntityClientPlayerMP", 2);
+        s_fMC_thePlayer = env->GetFieldID(s_classMC, nPl.c_str(), sMp.c_str());
         if (env->ExceptionCheck()) { env->ExceptionClear(); s_fMC_thePlayer = nullptr; }
         if (!s_fMC_thePlayer) {
-            s_fMC_thePlayer = env->GetFieldID(
-                s_classMC, "thePlayer",
-                "Lnet/minecraft/client/entity/EntityPlayerSP;");
+            std::string sSp = Mapper::Get("net/minecraft/client/entity/EntityPlayerSP", 2);
+            s_fMC_thePlayer = env->GetFieldID(s_classMC, nPl.c_str(), sSp.c_str());
             if (env->ExceptionCheck()) { env->ExceptionClear(); s_fMC_thePlayer = nullptr; }
         }
 
         if (!s_fMC_instance || !s_fMC_thePlayer) return false;
 
-        // ── InventoryPlayer ───────────────────────────────────────────────────
-        jclass clsPlayer = env->FindClass(
-            "net/minecraft/client/entity/EntityClientPlayerMP");
+        jclass clsPlayer = findMc("net/minecraft/client/entity/EntityClientPlayerMP");
         if (env->ExceptionCheck()) { env->ExceptionClear(); clsPlayer = nullptr; }
-        if (!clsPlayer) {
-            clsPlayer = env->FindClass("net/minecraft/client/entity/EntityPlayerSP");
-            if (env->ExceptionCheck()) { env->ExceptionClear(); clsPlayer = nullptr; }
-        }
+        if (!clsPlayer)
+            clsPlayer = findMc("net/minecraft/client/entity/EntityPlayerSP");
 
         if (clsPlayer) {
-            s_fPlayer_inventory = env->GetFieldID(
-                clsPlayer, "inventory",
-                "Lnet/minecraft/entity/player/InventoryPlayer;");
+            std::string nInv = Mapper::Get("inventory");
+            std::string sInv = Mapper::Get("net/minecraft/entity/player/InventoryPlayer", 2);
+            s_fPlayer_inventory = env->GetFieldID(clsPlayer, nInv.c_str(), sInv.c_str());
             if (env->ExceptionCheck()) { env->ExceptionClear(); s_fPlayer_inventory = nullptr; }
-            env->DeleteLocalRef(clsPlayer);
         }
         if (!s_fPlayer_inventory) return false;
 
-        jclass clsInv = env->FindClass(
-            "net/minecraft/entity/player/InventoryPlayer");
+        jclass clsInv = findMc("net/minecraft/entity/player/InventoryPlayer");
         if (env->ExceptionCheck()) { env->ExceptionClear(); clsInv = nullptr; }
 
         if (clsInv) {
-            s_fInv_currentItem = env->GetFieldID(clsInv, "currentItem", "I");
+            std::string nCur = Mapper::Get("currentItem");
+            s_fInv_currentItem = env->GetFieldID(clsInv, nCur.c_str(), "I");
             if (env->ExceptionCheck()) { env->ExceptionClear(); s_fInv_currentItem = nullptr; }
 
-            s_fInv_mainInventory = env->GetFieldID(
-                clsInv, "mainInventory", "[Lnet/minecraft/item/ItemStack;");
+            std::string nMain = Mapper::Get("mainInventory");
+            std::string sArr = "[" + Mapper::Get("net/minecraft/item/ItemStack", 2);
+            s_fInv_mainInventory = env->GetFieldID(clsInv, nMain.c_str(), sArr.c_str());
             if (env->ExceptionCheck()) { env->ExceptionClear(); s_fInv_mainInventory = nullptr; }
-
-            env->DeleteLocalRef(clsInv);
         }
         if (!s_fInv_currentItem || !s_fInv_mainInventory) return false;
 
-        // ── ItemStack ─────────────────────────────────────────────────────────
-        jclass clsStack = env->FindClass("net/minecraft/item/ItemStack");
+        jclass clsStack = findMc("net/minecraft/item/ItemStack");
         if (env->ExceptionCheck()) { env->ExceptionClear(); clsStack = nullptr; }
 
         if (clsStack) {
-            s_fItemStack_item = env->GetFieldID(
-                clsStack, "theItem", "Lnet/minecraft/item/Item;");
+            std::string nItem = Mapper::Get("theItem");
+            if (nItem.empty()) nItem = Mapper::Get("item");
+            std::string sItem = Mapper::Get("net/minecraft/item/Item", 2);
+            s_fItemStack_item = env->GetFieldID(clsStack, nItem.c_str(), sItem.c_str());
             if (env->ExceptionCheck()) { env->ExceptionClear(); s_fItemStack_item = nullptr; }
             if (!s_fItemStack_item) {
-                s_fItemStack_item = env->GetFieldID(
-                    clsStack, "item", "Lnet/minecraft/item/Item;");
+                nItem = Mapper::Get("item");
+                s_fItemStack_item = env->GetFieldID(clsStack, nItem.c_str(), sItem.c_str());
                 if (env->ExceptionCheck()) { env->ExceptionClear(); s_fItemStack_item = nullptr; }
             }
-            env->DeleteLocalRef(clsStack);
         }
         if (!s_fItemStack_item) return false;
 
-        // ── Item ──────────────────────────────────────────────────────────────
-        jclass clsItem = env->FindClass("net/minecraft/item/Item");
+        jclass clsItem = findMc("net/minecraft/item/Item");
         if (env->ExceptionCheck()) { env->ExceptionClear(); clsItem = nullptr; }
 
         if (clsItem) {
-            s_fItem_itemID = env->GetFieldID(clsItem, "itemID", "I");
+            std::string nId = Mapper::Get("itemID");
+            if (nId.empty()) nId = "itemID";
+            s_fItem_itemID = env->GetFieldID(clsItem, nId.c_str(), "I");
             if (env->ExceptionCheck()) { env->ExceptionClear(); s_fItem_itemID = nullptr; }
-            env->DeleteLocalRef(clsItem);
         }
         if (!s_fItem_itemID) return false;
 

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Klass.h"
+#include "Mapper.h"
 #include <string>
 
 const char* Klass::GetName(JNIEnv* env)
@@ -7,16 +8,22 @@ const char* Klass::GetName(JNIEnv* env)
 	if (this == NULL || env == NULL)
 		return NULL;
 
-	const auto cls = env->FindClass("java/lang/Class");
-	if (!cls)
-		return "";
+	if (env->ExceptionCheck())
+		env->ExceptionClear();
 
-	const auto mid_getName = env->GetMethodID(cls, "getName", "()Ljava/lang/String;");
-	env->DeleteLocalRef(cls);
-	if (!mid_getName)
-		return "";
+	static jmethodID s_getName = nullptr;
+	if (!s_getName) {
+		jclass cls = env->FindClass("java/lang/Class");
+		if (!cls)
+			return "";
+		s_getName = env->GetMethodID(cls, "getName", "()Ljava/lang/String;");
+		env->DeleteLocalRef(cls);
+		if (!s_getName)
+			return "";
+	}
 
-	const auto jname = (jstring)env->CallObjectMethod((jclass)this, mid_getName);
+	const auto jname = (jstring)env->CallObjectMethod((jclass)this, s_getName);
+	if (env->ExceptionCheck()) { env->ExceptionClear(); return ""; }
 	if (!jname)
 		return "";
 
@@ -34,7 +41,9 @@ Field* Klass::GetField(JNIEnv* env, const char* name, const char* sig, bool stat
 	if (this == NULL || env == NULL)
 		return NULL;
 
-	return staticField ? (Field*)env->GetStaticFieldID((jclass)this, name, sig) : (Field*)env->GetFieldID((jclass)this, name, sig);
+	std::string rs = Mapper::RemapSignature(sig);
+	const char* s = rs.c_str();
+	return staticField ? (Field*)env->GetStaticFieldID((jclass)this, name, s) : (Field*)env->GetFieldID((jclass)this, name, s);
 }
 
 Method* Klass::GetMethod(JNIEnv* env, const char* name, const char* sig, bool staticMethod)
@@ -42,5 +51,7 @@ Method* Klass::GetMethod(JNIEnv* env, const char* name, const char* sig, bool st
 	if (this == NULL || env == NULL)
 		return NULL;
 
-	return staticMethod ? (Method*)env->GetStaticMethodID((jclass)this, name, sig) : (Method*)env->GetMethodID((jclass)this, name, sig);
+	std::string rs = Mapper::RemapSignature(sig);
+	const char* s = rs.c_str();
+	return staticMethod ? (Method*)env->GetStaticMethodID((jclass)this, name, s) : (Method*)env->GetMethodID((jclass)this, name, s);
 }

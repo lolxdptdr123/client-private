@@ -95,7 +95,7 @@ static void Ensure(JNIEnv* env) {
             JniOk(env);
         }
         if (!s_rayTrace) {
-            Klass* w = g_Instance->FindClass("net/minecraft/world/World");
+            Klass* w = g_Instance->FindClass(Mapper::Get("net/minecraft/world/World").c_str());
             if (w) {
                 s_rayTrace = env->GetMethodID((jclass)w, rt.c_str(), rsig.c_str());
                 JniOk(env);

@@ -35,7 +35,7 @@ private:
 	bool m_CleanJVMTI;
 
 	std::unique_ptr<Memory> m_Memory;
-	std::unordered_map<std::string, Klass*> m_CachedKlass;
+	mutable std::unordered_map<std::string, Klass*> m_CachedKlass;
 
 	JavaVM* m_Jvm;
 	JNIEnv* m_Env;

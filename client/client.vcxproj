@@ -222,6 +222,8 @@
     <ClInclude Include="src\Game\Field.h" />
     <ClInclude Include="src\Game\Klass.h" />
     <ClInclude Include="src\Game\Mapper.h" />
+    <ClInclude Include="src\Game\Mappings\CheatBreaker_v1_7_10.inc" />
+    <ClInclude Include="src\Game\Mappings\CheatBreaker_v1_8_9.inc" />
     <ClInclude Include="src\Game\Method.h" />
     <ClInclude Include="src\Globals.h" />
     <ClInclude Include="src\Helper\Communication.h" />

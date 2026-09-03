@@ -118,8 +118,9 @@ static BOOL CALLBACK EnumGameWindowProc(HWND hwnd, LPARAM lParam)
     GetClassNameW(hwnd, cls, 64);
 
     const bool lunarTitle = wcsstr(title, L"Lunar") != nullptr;
+    const bool cbTitle = wcsstr(title, L"CheatBreaker") != nullptr || wcsstr(title, L"Cheatbreaker") != nullptr;
     const bool glClass = _wcsicmp(cls, L"LWJGL") == 0 || _wcsicmp(cls, L"GLFW30") == 0;
-    if (!lunarTitle && !glClass)
+    if (!lunarTitle && !cbTitle && !glClass)
         return TRUE;
 
     *reinterpret_cast<HWND*>(lParam) = hwnd;
@@ -144,6 +145,7 @@ HWND FindLunarWindow()
 
     HWND h = FindWindowW(nullptr, L"Lunar Client 1.8.9");
     if (!h) h = FindWindowW(nullptr, L"Lunar Client 1.7.10");
+    if (!h) h = FindWindowW(nullptr, L"CheatBreaker");
     if (!h) EnumWindows(EnumGameWindowProc, reinterpret_cast<LPARAM>(&h));
     if (!h) h = FindWindowW(L"LWJGL", nullptr);
     if (!h) h = FindWindowW(L"GLFW30", nullptr);

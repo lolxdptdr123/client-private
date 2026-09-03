@@ -40,3 +40,4 @@ public:
 };
 
 extern GameVersions g_GameVersion;
+extern GameLauncher g_GameLauncher;

@@ -1,11 +1,35 @@
 #include "pch.h"
 #include "Mapper.h"
+#include "../Cheat/Modules/Settings.h"
+#include "Mappings/CheatBreaker_v1_8_9.inc"
+#include "Mappings/CheatBreaker_v1_7_10.inc"
 #include <unordered_map>
+#include <string>
 
-static std::unordered_map<std::string_view, std::string_view> g_Mappings;
+static std::unordered_map<std::string, std::string> g_Mappings;
+static std::unordered_map<std::string, std::string> g_CbSimple;
+static bool g_UseCb = false;
 
 void Mapper::Initialize(const GameVersions version)
 {
+	g_Mappings.clear();
+	g_CbSimple.clear();
+	g_UseCb = (g_GameLauncher == LAUNCHER_CHEATBREAKER);
+	if (g_UseCb) {
+		if (version == LUNAR_1_8_9) {
+			MapperFillCB_1_8(g_Mappings);
+			MapperFillCBClasses_1_8(g_CbSimple);
+		} else {
+			MapperFillCB_1_7(g_Mappings);
+			MapperFillCBClasses_1_7(g_CbSimple);
+		}
+		if (version == LUNAR_1_8_9) {
+			auto sp = g_Mappings.find("net/minecraft/client/entity/EntityPlayerSP");
+			if (sp != g_Mappings.end())
+				g_Mappings["net/minecraft/client/entity/EntityClientPlayerMP"] = sp->second;
+		}
+		return;
+	}
 	switch (version)
 	{
 	case LUNAR_1_8_9:
@@ -274,6 +298,7 @@ void Mapper::Initialize(const GameVersions version)
 			{ "net/minecraft/nbt/NBTTagCompound", "net/minecraft/nbt/NBTTagCompound" },
 			{ "tagCount", "tagCount" },
 			{ "getCompoundTagAt", "getCompoundTagAt" },
+			{ "net/minecraft/world/World", "net/minecraft/world/World" },
 		};
 		if (version == LUNAR_1_8_9) {
 			g_Mappings["net/minecraft/client/entity/EntityClientPlayerMP"] = "net/minecraft/client/entity/EntityPlayerSP";
@@ -326,4 +351,47 @@ std::string Mapper::Get(const char* mapping, int type)
 	}
 
 	return ret;
+}
+
+bool Mapper::IsCheatBreaker()
+{
+	return g_UseCb;
+}
+
+std::string Mapper::RemapSignature(const char* sig)
+{
+	if (!g_UseCb || !sig || !sig[0])
+		return sig ? std::string(sig) : std::string();
+	std::string in(sig);
+	std::string out;
+	out.reserve(in.size());
+	for (size_t i = 0; i < in.size(); ) {
+		if (in[i] == 'L') {
+			size_t sc = in.find(';', i);
+			if (sc == std::string::npos) {
+				out.append(in.substr(i));
+				break;
+			}
+			std::string path = in.substr(i + 1, sc - i - 1);
+			std::string mapped;
+			auto it = g_Mappings.find(path);
+			if (it != g_Mappings.end())
+				mapped = it->second;
+			else {
+				size_t slash = path.rfind('/');
+				std::string simple = (slash == std::string::npos) ? path : path.substr(slash + 1);
+				auto it2 = g_CbSimple.find(simple);
+				if (it2 != g_CbSimple.end())
+					mapped = it2->second;
+			}
+			out.push_back('L');
+			out.append(mapped.empty() ? path : mapped);
+			out.push_back(';');
+			i = sc + 1;
+		}
+		else {
+			out.push_back(in[i++]);
+		}
+	}
+	return out;
 }
