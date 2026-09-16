@@ -7,6 +7,8 @@ namespace FastBreakSettings {
     inline int   mode = 0;       // 0 Normal, 1 Timer
     inline float power = 0.f;    // 0–100, Normal
     inline float multiplier = 1.f; // Timer
+    inline int   liveDelay = 0;
+    inline int   liveRemain = 0;
 }
 
 class FastBreak : public Module {
@@ -16,11 +18,8 @@ public:
     const char* GetName()   override { return "FastBreak"; }
     bool        IsEnabled() override { return enabled; }
     const char* GetSuffix() override {
-        static char buf[32];
-        if (FastBreakSettings::mode == 0)
-            snprintf(buf, sizeof(buf), "Normal %.0f%%", FastBreakSettings::power);
-        else
-            snprintf(buf, sizeof(buf), "Timer %.1fx", FastBreakSettings::multiplier);
+        static char buf[40];
+        snprintf(buf, sizeof(buf), "%d t", FastBreakSettings::liveRemain);
         return buf;
     }
 

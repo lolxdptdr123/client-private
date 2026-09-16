@@ -15,6 +15,7 @@ namespace NotificationSettings {
     inline bool catCombat = true;
     inline bool catVisual = true;
     inline bool catUtility = true;
+    inline bool catBlocks = true;
 
     inline float duration = 3.0f;
     inline float animSpeed = 8.0f;
@@ -42,6 +43,7 @@ namespace NotificationSettings {
         if (cat == "Combat" && !catCombat)  return;
         if (cat == "Visual" && !catVisual)  return;
         if (cat == "Utility" && !catUtility) return;
+        if (cat == "Blocks" && !catBlocks) return;
 
         for (auto& n : queue) {
             if (n.moduleName == moduleName && !n.slidingOut) {
@@ -72,6 +74,7 @@ namespace NotificationSettings {
         if (cat == "Combat" && !catCombat)  return;
         if (cat == "Visual" && !catVisual)  return;
         if (cat == "Utility" && !catUtility) return;
+        if (cat == "Blocks" && !catBlocks) return;
 
         // Remplacer si même titre déjà dans la queue
         for (auto& n : queue) {

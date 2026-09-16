@@ -4,6 +4,7 @@
 #include "SwordCheck.h"
 #include "clicker.h"
 #include "../Misc/Friends.h"
+#include "../Misc/Enemies.h"
 #include "AntiBot.h"
 #include "../../../Game/Classes/Player.h"
 #include "../../../Game/Classes/Minecraft.h"
@@ -182,7 +183,8 @@ namespace {
         if (AimAssistSettings::keepOnTarget && g_lastTarget.entityId != -1) {
             Player* current = FindById(players, g_lastTarget.entityId, env);
             if (current && current->GetEntityId(env) != localId) {
-                if (!FriendsSettings::IsFriend(env, current) && !AntiBot_IsBot(env, (jobject)current)) {
+                if (!FriendsSettings::IsFriend(env, current) && !AntiBot_IsBot(env, (jobject)current)
+                    && !EnemiesSettings::BlocksTarget(env, current)) {
                     double distance = Dist2D(local, current, env);
                     if (distance > 6.0) distance = 6.0;
                     float rotations[2]{ 0.f, 0.f };
@@ -200,6 +202,7 @@ namespace {
             if (player->GetEntityId(env) == localId) continue;
 
             if (FriendsSettings::IsFriend(env, player)) continue;
+            if (EnemiesSettings::BlocksTarget(env, player)) continue;
             if (AntiBot_IsBot(env, (jobject)player)) continue;
             if (player->IsDead(env)) continue;
             if (!AimAssistSettings::allowInvisible && player->IsInvisible(env)) continue;

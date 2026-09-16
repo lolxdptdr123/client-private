@@ -497,6 +497,8 @@ static const char* EnchantAbbrev(int id) {
 }
 
 static std::string FormatDuration(int ticks) {
+    if (ticks < 0 || ticks >= 24000)
+        return "inf";
     int s = ticks / 20;
     char buf[16];
     snprintf(buf, sizeof(buf), "%d:%02d", s / 60, s % 60);

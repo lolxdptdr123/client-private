@@ -9,6 +9,7 @@
 #include "../../../Game/Field.h"
 #include "../../../Game/Classes/Player.h"
 #include "../../../Game/Classes/Minecraft.h"
+#include "../../../Game/Classes/ItemStack.h"
 #include "../../../Cheat/Hack.h"
 
 // ── Cache partagé via inline (C++17) ─────────────────────────────────────────
@@ -86,8 +87,20 @@ static bool SC_BuildCache(JNIEnv* env) {
 }
 
 // ── SC_IsHoldingSword ─────────────────────────────────────────────────────────
+// Lunar : instanceof ItemSword / ItemAxe (fail-open si le cache n'est pas prêt).
+// CheatBreaker : même règle, mais fail-closed (main vide / item inconnu = pas d'arme).
 
-static bool SC_IsHoldingSword(JNIEnv* env) {
+static bool SC_IsWeaponItemId(int id) {
+    switch (id) {
+    case 267: case 268: case 272: case 276: case 283:
+    case 258: case 271: case 275: case 279: case 286:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool SC_IsHoldingSword_Lunar(JNIEnv* env) {
     if (!env || !g_Instance) return true;
 
     if (!g_swordCache.ok)
@@ -99,7 +112,7 @@ static bool SC_IsHoldingSword(JNIEnv* env) {
     Player* lp = reinterpret_cast<Player*>(lpObj);
 
     jobject stackObj = SC_SafeGetHeldItem(lp, env);
-    if (!stackObj) return false; // main vide = pas une épée
+    if (!stackObj) return false;
 
     jclass stackKlass = env->GetObjectClass(stackObj);
     if (!stackKlass) return false;
@@ -108,14 +121,84 @@ static bool SC_IsHoldingSword(JNIEnv* env) {
     std::string itemSig = "L" + std::string(Mapper::Get("net/minecraft/item/Item")) + ";";
 
     Field* fItem = ((Klass*)stackKlass)->GetField(env, itemFieldName.c_str(), itemSig.c_str());
-    env->DeleteLocalRef(stackKlass); // libéré après usage, avant appel SEH
+    env->DeleteLocalRef(stackKlass);
     if (!fItem) return false;
 
-    // stackKlass n'est plus passé ici — suppression du dangling pointer
     jobject itemObj = SC_SafeGetItemField(env, stackObj, fItem);
     if (!itemObj) return false;
 
     return SC_SafeIsInstance(env, itemObj,
         g_swordCache.clsItemSword,
         g_swordCache.clsItemAxe);
+}
+
+static bool SC_IsHoldingSword_CB(JNIEnv* env) {
+    if (!env || !g_Instance) return false;
+
+    if (!g_swordCache.ok)
+        SC_BuildCache(env);
+
+    jobject lpObj = Minecraft::GetThePlayer(env);
+    if (!lpObj) return false;
+    Player* lp = reinterpret_cast<Player*>(lpObj);
+
+    jobject stackObj = SC_SafeGetHeldItem(lp, env);
+    if (!stackObj) {
+        static DWORD lastLog = 0;
+        DWORD now = GetTickCount();
+        if (now - lastLog > 1000) {
+            lastLog = now;
+            FILE* wf = nullptr;
+            fopen_s(&wf, "C:\\Users\\bipbo\\Documents\\lolxd_weapon.txt", "w");
+            if (wf) { fprintf(wf, "held item null player=%p cache=%d\n", (void*)lpObj, (int)g_swordCache.ok); fclose(wf); }
+        }
+        env->DeleteLocalRef(lpObj);
+        return false;
+    }
+
+    jobject itemObj = ((ItemStack*)stackObj)->GetItem(env);
+    if (!itemObj) {
+        jclass stackKlass = env->GetObjectClass(stackObj);
+        if (stackKlass) {
+            std::string itemFieldName = Mapper::Get("item");
+            std::string itemSig = Mapper::Get("net/minecraft/item/Item", 2);
+            Field* fItem = ((Klass*)stackKlass)->GetField(env, itemFieldName.c_str(), itemSig.c_str());
+            if (env->ExceptionCheck()) { env->ExceptionClear(); fItem = nullptr; }
+            env->DeleteLocalRef(stackKlass);
+            if (fItem) itemObj = SC_SafeGetItemField(env, stackObj, fItem);
+        }
+    }
+
+    bool inst = false;
+    if (itemObj && g_swordCache.ok)
+        inst = SC_SafeIsInstance(env, itemObj, g_swordCache.clsItemSword, g_swordCache.clsItemAxe);
+
+    int id = ((ItemStack*)stackObj)->GetItemId(env);
+    bool ok = inst || SC_IsWeaponItemId(id);
+
+    {
+        static DWORD lastLog = 0;
+        DWORD now = GetTickCount();
+        if (now - lastLog > 1000) {
+            lastLog = now;
+            FILE* wf = nullptr;
+            fopen_s(&wf, "C:\\Users\\bipbo\\Documents\\lolxd_weapon.txt", "w");
+            if (wf) {
+                fprintf(wf, "ok=%d inst=%d cache=%d id=%d item=%p stack=%p player=%p\n",
+                    (int)ok, (int)inst, (int)g_swordCache.ok, id, (void*)itemObj, (void*)stackObj, (void*)lpObj);
+                fclose(wf);
+            }
+        }
+    }
+
+    if (itemObj) env->DeleteLocalRef(itemObj);
+    env->DeleteLocalRef(stackObj);
+    env->DeleteLocalRef(lpObj);
+    return ok;
+}
+
+#include "../Misc/Weapons.h"
+
+static bool SC_IsHoldingSword(JNIEnv* env) {
+    return Weapons_IsHolding(env);
 }

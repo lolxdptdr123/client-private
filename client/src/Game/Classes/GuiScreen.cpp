@@ -1,4 +1,4 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "GuiScreen.h"
 
 #include <string>
@@ -46,6 +46,13 @@ bool GuiScreen::IsInventory(JNIEnv* env) {
 bool GuiScreen::IsChat(JNIEnv* env) {
     if (this == nullptr) return false;
     return ClassNameEndsWith(env, (jobject)this, "GuiChat");
+}
+
+bool GuiScreen::IsChestGui(JNIEnv* env) {
+    if (this == nullptr) return false;
+    return ClassNameEndsWith(env, (jobject)this, "GuiChest")
+        || ClassNameEndsWith(env, (jobject)this, "GuiHopper")
+        || ClassNameEndsWith(env, (jobject)this, "GuiDispenser");
 }
 
 bool GuiScreen::IsContainerGui(JNIEnv* env) {

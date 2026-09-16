@@ -1,11 +1,54 @@
 #include "pch.h"
 #include "Mapper.h"
+#include "../Cheat/Modules/Settings.h"
+#include "Mappings/CheatBreaker_v1_8_9.inc"
+#include "Mappings/CheatBreaker_v1_7_10.inc"
 #include <unordered_map>
+#include <string>
 
-static std::unordered_map<std::string_view, std::string_view> g_Mappings;
+static std::unordered_map<std::string, std::string> g_Mappings;
+static std::unordered_map<std::string, std::string> g_CbSimple;
+static bool g_UseCb = false;
 
 void Mapper::Initialize(const GameVersions version)
 {
+	g_Mappings.clear();
+	g_CbSimple.clear();
+	g_UseCb = (g_GameLauncher == LAUNCHER_CHEATBREAKER);
+	if (g_UseCb) {
+		if (version == LUNAR_1_8_9) {
+			MapperFillCB_1_8(g_Mappings);
+			MapperFillCBClasses_1_8(g_CbSimple);
+		} else {
+			MapperFillCB_1_7(g_Mappings);
+			MapperFillCBClasses_1_7(g_CbSimple);
+		}
+		// 1.8 CB : EntityClientPlayerMP = même classe que EntityPlayerSP
+		if (version == LUNAR_1_8_9) {
+			auto sp = g_Mappings.find("net/minecraft/client/entity/EntityPlayerSP");
+			if (sp != g_Mappings.end())
+				g_Mappings["net/minecraft/client/entity/EntityClientPlayerMP"] = sp->second;
+		}
+		auto bindCb = [&](const char* mcp) {
+			size_t sl = std::string(mcp).rfind('/');
+			std::string simple = (sl == std::string::npos) ? std::string(mcp) : std::string(mcp + sl + 1);
+			auto it = g_CbSimple.find(simple);
+			if (it != g_CbSimple.end())
+				g_Mappings[mcp] = it->second;
+		};
+		bindCb("net/minecraft/network/play/client/C07PacketPlayerDigging");
+		bindCb("net/minecraft/network/play/client/C07PacketPlayerDigging$Action");
+		bindCb("net/minecraft/network/play/client/C08PacketPlayerBlockPlacement");
+		bindCb("net/minecraft/world/World");
+		bindCb("net/minecraft/client/multiplayer/WorldClient");
+		bindCb("net/minecraft/client/renderer/EntityRenderer");
+		bindCb("net/minecraft/entity/projectile/EntityArrow");
+		bindCb("net/minecraft/entity/projectile/EntityFireball");
+		bindCb("net/minecraft/entity/projectile/EntitySmallFireball");
+		bindCb("net/minecraft/entity/projectile/EntityLargeFireball");
+		bindCb("net/minecraft/entity/item/EntityEnderPearl");
+		return;
+	}
 	switch (version)
 	{
 	case LUNAR_1_8_9:
@@ -14,6 +57,7 @@ void Mapper::Initialize(const GameVersions version)
 		// WhipBin mappings/v1_7_10/lunar.json
 		g_Mappings = {
 			{ "hurtTime", "hurtTime" },
+			{ "attackedAtYaw", "attackedAtYaw" },
 			{ "getIdFromItem", "getIdFromItem" },
 			{ "net/minecraft/client/Minecraft", "net/minecraft/client/Minecraft" },
 			{ "net/minecraft/client/entity/EntityClientPlayerMP", "net/minecraft/client/entity/EntityClientPlayerMP" },
@@ -25,6 +69,12 @@ void Mapper::Initialize(const GameVersions version)
 			{ "net/minecraft/client/renderer/entity/Render", "net/minecraft/client/renderer/entity/Render" },
 			{ "net/minecraft/client/model/ModelBase", "net/minecraft/client/model/ModelBase" },
 			{ "net/minecraft/client/renderer/ActiveRenderInfo", "net/minecraft/client/renderer/ActiveRenderInfo" },
+			{ "net/minecraft/client/renderer/EntityRenderer", "net/minecraft/client/renderer/EntityRenderer" },
+			{ "entityRenderer", "entityRenderer" },
+			{ "renderWorld", "renderWorld" },
+			{ "updateCameraAndRender", "updateCameraAndRender" },
+			{ "timeInPortal", "timeInPortal" },
+			{ "prevTimeInPortal", "prevTimeInPortal" },
 			{ "net/minecraft/util/IChatComponent", "net/minecraft/util/IChatComponent" },
 			{ "net/minecraft/client/model/ModelRenderer", "net/minecraft/client/model/ModelRenderer" },
 			{ "net/minecraft/util/Timer", "net/minecraft/util/Timer" },
@@ -36,6 +86,9 @@ void Mapper::Initialize(const GameVersions version)
 			{ "net/minecraft/item/ItemStack", "net/minecraft/item/ItemStack" },
 			{ "net/minecraft/item/ItemSword", "net/minecraft/item/ItemSword" },
 			{ "net/minecraft/item/ItemAxe", "net/minecraft/item/ItemAxe" },
+			{ "net/minecraft/item/ItemPickaxe", "net/minecraft/item/ItemPickaxe" },
+			{ "net/minecraft/item/ItemSpade", "net/minecraft/item/ItemSpade" },
+			{ "net/minecraft/item/ItemShears", "net/minecraft/item/ItemShears" },
 			{ "net/minecraft/item/Item", "net/minecraft/item/Item" },
 			{ "net/minecraft/item/ItemBlock", "net/minecraft/item/ItemBlock" },
 			{ "net/minecraft/util/MovingObjectPosition$MovingObjectType", "net/minecraft/util/MovingObjectPosition$MovingObjectType" },
@@ -43,7 +96,16 @@ void Mapper::Initialize(const GameVersions version)
 			{ "net/minecraft/client/gui/inventory/GuiInventory", "net/minecraft/client/gui/inventory/GuiInventory" },
 			{ "net/minecraft/entity/player/InventoryPlayer", "net/minecraft/entity/player/InventoryPlayer" },
 			{ "net/minecraft/item/ItemEnderPearl", "net/minecraft/item/ItemEnderPearl" },
+			{ "net/minecraft/entity/projectile/EntityArrow", "net/minecraft/entity/projectile/EntityArrow" },
+			{ "net/minecraft/entity/projectile/EntityFireball", "net/minecraft/entity/projectile/EntityFireball" },
+			{ "net/minecraft/entity/projectile/EntitySmallFireball", "net/minecraft/entity/projectile/EntitySmallFireball" },
+			{ "net/minecraft/entity/projectile/EntityLargeFireball", "net/minecraft/entity/projectile/EntityLargeFireball" },
+			{ "net/minecraft/entity/item/EntityEnderPearl", "net/minecraft/entity/item/EntityEnderPearl" },
 			{ "net/minecraft/item/ItemPotion", "net/minecraft/item/ItemPotion" },
+			{ "net/minecraft/item/ItemArmor", "net/minecraft/item/ItemArmor" },
+			{ "net/minecraft/item/ItemFood", "net/minecraft/item/ItemFood" },
+			{ "net/minecraft/item/ItemAppleGold", "net/minecraft/item/ItemAppleGold" },
+			{ "net/minecraft/item/ItemBow", "net/minecraft/item/ItemBow" },
 			{ "isSplash", "isSplash" },
 			{ "getColorFromDamage", "getColorFromDamage" },
 			{ "getColorFromItemStack", "getColorFromItemStack" },
@@ -69,6 +131,12 @@ void Mapper::Initialize(const GameVersions version)
 			{ "gameSettings", "gameSettings" },
 			{ "thirdPersonView", "thirdPersonView" },
 			{ "getBlock", "getBlock" },
+			{ "getBlockState", "getBlockState" },
+			{ "getStrVsBlock", "getStrVsBlock" },
+			{ "net/minecraft/block/state/IBlockState", "net/minecraft/block/state/IBlockState" },
+			{ "blockX", "blockX" },
+			{ "blockY", "blockY" },
+			{ "blockZ", "blockZ" },
 			{ "getIdFromBlock", "getIdFromBlock" },
 			{ "theMinecraft", "theMinecraft" },
 			{ "thePlayer", "thePlayer" },
@@ -175,10 +243,19 @@ void Mapper::Initialize(const GameVersions version)
 			{ "net/minecraft/network/Packet", "net/minecraft/network/Packet" },
 			{ "net/minecraft/network/play/client/C03PacketPlayer$C04PacketPlayerPosition", "net/minecraft/network/play/client/C03PacketPlayer$C04PacketPlayerPosition" },
 			{ "net/minecraft/network/play/client/C03PacketPlayer$C05PacketPlayerLook", "net/minecraft/network/play/client/C03PacketPlayer$C05PacketPlayerLook" },
+			{ "net/minecraft/network/play/client/C07PacketPlayerDigging", "net/minecraft/network/play/client/C07PacketPlayerDigging" },
+			{ "net/minecraft/network/play/client/C07PacketPlayerDigging$Action", "net/minecraft/network/play/client/C07PacketPlayerDigging$Action" },
+			{ "net/minecraft/network/play/client/C08PacketPlayerBlockPlacement", "net/minecraft/network/play/client/C08PacketPlayerBlockPlacement" },
+			{ "net/minecraft/world/World", "net/minecraft/world/World" },
+			{ "sendUseItem", "sendUseItem" },
+			{ "onStoppedUsingItem", "onStoppedUsingItem" },
+			{ "stopUsingItem", "stopUsingItem" },
 			{ "net/minecraft/item/ItemFishingRod", "net/minecraft/item/ItemFishingRod" },
 			{ "rightClickMouse", "rightClickMouse" },
 			{ "rightClickDelayTimer", "rightClickDelayTimer" },
 			{ "isSwingInProgress", "isSwingInProgress" },
+			{ "swingItem", "swingItem" },
+			{ "leftClickCounter", "leftClickCounter" },
 			{ "getHeldItem", "getHeldItem" },
 			{ "item", "theItem" },
 			{ "getItem", "getItem" },
@@ -195,6 +272,8 @@ void Mapper::Initialize(const GameVersions version)
 			{ "moveStrafe", "moveStrafe" },
 			{ "jumpTicks", "jumpTicks" },
 			{ "movementInput", "movementInput" },
+			{ "sneak", "sneak" },
+			{ "setSneaking", "setSneaking" },
 			{ "net/minecraft/util/MovementInput", "net/minecraft/util/MovementInput" },
 			{ "timerSpeed", "timerSpeed" },
 			{ "inventory", "inventory" },
@@ -231,6 +310,13 @@ void Mapper::Initialize(const GameVersions version)
 			{ "net/minecraft/inventory/Slot", "net/minecraft/inventory/Slot" },
 			{ "net/minecraft/item/ItemSoup", "net/minecraft/item/ItemSoup" },
 			{ "net/minecraft/client/gui/inventory/GuiContainer", "net/minecraft/client/gui/inventory/GuiContainer" },
+			{ "net/minecraft/client/gui/inventory/GuiChest", "net/minecraft/client/gui/inventory/GuiChest" },
+			{ "net/minecraft/inventory/IInventory", "net/minecraft/inventory/IInventory" },
+			{ "lowerChestInventory", "lowerChestInventory" },
+			{ "getInventoryName", "getInventoryName" },
+			{ "getSizeInventory", "getSizeInventory" },
+			{ "getUnformattedText", "getUnformattedText" },
+			{ "getStack", "getStack" },
 			{ "playerController", "playerController" },
 			{ "curBlockDamageMP", "curBlockDamageMP" },
 			{ "blockHitDelay", "blockHitDelay" },
@@ -256,6 +342,7 @@ void Mapper::Initialize(const GameVersions version)
 			{ "yDisplayPosition", "yDisplayPosition" },
 			{ "inventorySlots", "inventorySlots" },
 			{ "isUsingItem", "isUsingItem" },
+			{ "itemInUse", "itemInUse" },
 			{ "itemInUseCount", "itemInUseCount" },
 			{ "getEyeHeight", "getEyeHeight" },
 			{ "rayTraceBlocks", "rayTraceBlocks" },
@@ -326,4 +413,54 @@ std::string Mapper::Get(const char* mapping, int type)
 	}
 
 	return ret;
+}
+
+void Mapper::Set(const char* mapping, const char* value)
+{
+	if (!mapping || !mapping[0] || !value || !value[0])
+		return;
+	g_Mappings[mapping] = value;
+	size_t sl = std::string(mapping).rfind('/');
+	if (sl != std::string::npos)
+		g_CbSimple[std::string(mapping).substr(sl + 1)] = value;
+	else
+		g_CbSimple[mapping] = value;
+}
+
+bool Mapper::IsCheatBreaker()
+{
+	return g_UseCb;
+}
+
+std::string Mapper::RemapSignature(const char* sig)
+{
+	if (!g_UseCb || !sig || !sig[0])
+		return sig ? std::string(sig) : std::string();
+	std::string in(sig);
+	std::string out;
+	out.reserve(in.size());
+	for (size_t i = 0; i < in.size(); ) {
+		if (in[i] == 'L') {
+			size_t sc = in.find(';', i);
+			if (sc == std::string::npos) { out.append(in.substr(i)); break; }
+			std::string path = in.substr(i + 1, sc - i - 1);
+			std::string mapped;
+			auto it = g_Mappings.find(path);
+			if (it != g_Mappings.end())
+				mapped = it->second;
+			else {
+				size_t sl = path.rfind('/');
+				std::string simple = (sl == std::string::npos) ? path : path.substr(sl + 1);
+				auto it2 = g_CbSimple.find(simple);
+				if (it2 != g_CbSimple.end()) mapped = it2->second;
+			}
+			out.push_back('L');
+			out.append(mapped.empty() ? path : mapped);
+			out.push_back(';');
+			i = sc + 1;
+		} else {
+			out.push_back(in[i++]);
+		}
+	}
+	return out;
 }

@@ -17,6 +17,7 @@ namespace Clicker {
 }
 
 extern std::atomic<bool> g_physicalDown;
+extern std::atomic<bool> g_physicalRightDown;
 
 class LeftClicker : public Module
 {

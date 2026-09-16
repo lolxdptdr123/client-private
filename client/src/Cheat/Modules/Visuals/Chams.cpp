@@ -164,7 +164,6 @@ static void ResetWorldGl() {
 
 void Chams::OnRender(JNIEnv* env) {
     if (!enabled || !env) return;
-    if (!ChamsSettings::glowMode && !ChamsSettings::renderTexture) return;
     if (g_renderingChams) return;
 
     jobject playerObj = Minecraft::GetThePlayer(env);
@@ -229,14 +228,24 @@ void Chams::OnRender(JNIEnv* env) {
         float col[4];
         GetEntityColor(env, e, col);
 
+        glDisable(GL_DEPTH_TEST);
+        glDepthFunc(GL_ALWAYS);
+        glDepthRange(0.0, 0.0);
+        glDepthMask(GL_FALSE);
+
         if (ChamsSettings::glowMode) {
             glColor4f(1.f, 1.f, 1.f, 1.f);
             rm->RenderEntitySimple(e, partial, env);
         } else {
             glDisable(GL_LIGHTING);
-            ApplyTexEnv(col, true);
+            ApplyTexEnv(col, ChamsSettings::renderTexture);
             rm->RenderEntitySimple(e, partial, env);
         }
+
+        glDepthMask(GL_TRUE);
+        glDepthRange(0.0, 1.0);
+        glDepthFunc(GL_LEQUAL);
+        glDisable(GL_DEPTH_TEST);
 
         env->DeleteLocalRef(e);
     }

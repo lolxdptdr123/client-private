@@ -13,6 +13,11 @@
 #include "../../../Game/Method.h"
 #include "../../../Cheat/Hack.h"
 #include "../Misc/Overlay.h"
+#include "../../../Helper/Utils.h"
+
+#include <algorithm>
+#include <atomic>
+#include "../Menu.h"
 #include "../Visuals/Notifications.h"
 #include "../../../Helper/Utils.h"
 
@@ -21,14 +26,35 @@
 #include <random>
 #include <unordered_set>
 #include <vector>
+#include <thread>
+#include <cstdarg>
+#include <cstdio>
 #include <timeapi.h>
 #pragma comment(lib, "winmm.lib")
+
+static void RefillLog(const char* fmt, ...) {
+    FILE* f = nullptr;
+    fopen_s(&f, "C:\\Users\\bipbo\\Documents\\lolxd_refill.txt", "a");
+    if (!f) return;
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    fprintf(f, "[%02d:%02d:%02d] ", st.wHour, st.wMinute, st.wSecond);
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
 
 static std::thread       g_refillThread;
 static std::atomic<bool> g_running{ false };
 static std::atomic<bool> g_doRefill{ false };
 static std::atomic<bool> g_busy{ false };
 static std::atomic<bool> g_legitActive{ false };
+static std::atomic<int>  g_guiCmd{ 0 };
+static std::atomic<int>  g_guiAck{ 0 };
+static bool              s_shiftHeld = false;
 
 static std::vector<std::vector<int>> g_patterns;
 static std::mt19937 g_rng{ std::random_device{}() };
@@ -55,10 +81,20 @@ enum class HealType { None, Heal, Soup };
 
 static HealType GetHealType(ItemStack* stack, JNIEnv* env) {
     if (!stack) return HealType::None;
+    int id = stack->GetItemId(env);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); id = -1; }
+    if (id == 282) return HealType::Soup;
+    if (stack->IsSoup(env)) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        return HealType::Soup;
+    }
+    if (env->ExceptionCheck()) env->ExceptionClear();
     int dmg = stack->GetMetadata(env);
-    if (env->ExceptionCheck()) { env->ExceptionClear(); return HealType::None; }
-    if (dmg == 16421 || dmg == 16453) return HealType::Heal;
-    if (stack->IsSoup(env)) return HealType::Soup;
+    if (env->ExceptionCheck()) { env->ExceptionClear(); dmg = 0; }
+    if (id == 373) return HealType::Heal;
+    if (stack->Is("net/minecraft/item/ItemPotion", env)) return HealType::Heal;
+    if (dmg == 16389 || dmg == 16421 || dmg == 16453) return HealType::Heal;
+    if ((dmg & 16384) != 0) return HealType::Heal;
     return HealType::None;
 }
 
@@ -139,16 +175,6 @@ static int FindSlot(InventoryPlayer* inv, JNIEnv* env,
     patternIndex = startPat;
     lastIndex = startIdx;
     return -1;
-}
-
-static int GetWindowId(jobject container, JNIEnv* env) {
-    if (!container) return 0;
-    Klass* cls = (Klass*)env->GetObjectClass(container);
-    if (!cls) return 0;
-    Field* f = cls->GetField(env, Mapper::Get("windowId").c_str(), "I");
-    env->DeleteLocalRef((jclass)cls);
-    if (!f) return 0;
-    return f->GetIntField(env, container);
 }
 
 static void GetSlotDisplay(jobject container, int slot, JNIEnv* env, int& x, int& y) {
@@ -268,6 +294,45 @@ static void SmoothMouseMove(int targetX, int targetY, int speed) {
     SetCursorPos(targetX, targetY);
 }
 
+static void JniOk(JNIEnv* env) {
+    if (env && env->ExceptionCheck()) env->ExceptionClear();
+}
+
+static void ReleaseShift() {
+    if (!s_shiftHeld) return;
+    keybd_event(VK_SHIFT, (BYTE)MapVirtualKey(VK_SHIFT, 0), KEYEVENTF_KEYUP, 0);
+    s_shiftHeld = false;
+}
+
+static void HoldShift() {
+    if (s_shiftHeld) return;
+    keybd_event(VK_SHIFT, (BYTE)MapVirtualKey(VK_SHIFT, 0), 0, 0);
+    s_shiftHeld = true;
+}
+
+static jobject GetFieldObj(JNIEnv* env, jobject obj, const char* name, const char* sig) {
+    if (!env || !obj || !name || !sig) return nullptr;
+    jclass c = env->GetObjectClass(obj);
+    if (!c) return nullptr;
+    jfieldID f = env->GetFieldID(c, name, sig);
+    JniOk(env);
+    jobject r = nullptr;
+    if (f) {
+        r = env->GetObjectField(obj, f);
+        JniOk(env);
+    }
+    env->DeleteLocalRef(c);
+    return r;
+}
+
+static jobject GetContainerFromScreen(JNIEnv* env, jobject screen) {
+    std::string contSig = Mapper::Get("net/minecraft/inventory/Container", 2);
+    if (contSig.empty() || !screen) return nullptr;
+    std::string name = Mapper::Get("inventorySlots");
+    if (name.empty()) name = "inventorySlots";
+    return GetFieldObj(env, screen, name.c_str(), contSig.c_str());
+}
+
 static void WaitTicks(int n) {
     if (n <= 0) return;
     Sleep(n * 50);
@@ -278,10 +343,71 @@ static int MsToTicks(int ms) {
     return (std::max)(1, (ms + 49) / 50);
 }
 
-static void DoWindowClick(JNIEnv* env, int windowId, int slot, jobject player) {
-    jobject r = Minecraft::WindowClick(env, windowId, slot, 0, 1, player);
-    if (r) env->DeleteLocalRef(r);
-    if (env->ExceptionCheck()) env->ExceptionClear();
+static bool SlotToScreen(JNIEnv* env, jobject container, int slot, int& outX, int& outY) {
+    int dw = Minecraft::GetDisplayWidth(env);
+    int dh = Minecraft::GetDisplayHeight(env);
+    if (dw <= 0 || dh <= 0) return false;
+    int guiScale = 0;
+    jobject gs = Minecraft::GetGameSettings(env);
+    if (gs) {
+        guiScale = ((GameSettings*)gs)->GetGuiScale(env);
+        env->DeleteLocalRef(gs);
+    }
+    ScaledRes sr = CalcScale(dw, dh, guiScale);
+    int guiLeft = 0, guiTop = 0, slotX = 0, slotY = 0;
+    GetGuiOrigin(env, sr, guiLeft, guiTop);
+    GetSlotDisplay(container, slot, env, slotX, slotY);
+    int sx = guiLeft + slotX + 8;
+    int sy = guiTop + slotY + 8;
+    double scaleX = (double)dw / (double)sr.scaledWidth;
+    double scaleY = (double)dh / (double)sr.scaledHeight;
+    outX = (int)(sx * scaleX);
+    outY = (int)(sy * scaleY);
+    if (!Minecraft::IsFullscreen(env)) {
+        HWND wnd = FindLunarWindow();
+        if (wnd) {
+            POINT o{ 0, 0 };
+            ClientToScreen(wnd, &o);
+            outX += o.x;
+            outY += o.y;
+        }
+    }
+    std::uniform_int_distribution off(-3, 3);
+    outX += off(g_rng);
+    outY += off(g_rng);
+    return true;
+}
+
+static void ShiftClickSlot(JNIEnv* env, jobject container, int slot, bool instant) {
+    int x = 0, y = 0;
+    if (!SlotToScreen(env, container, slot, x, y))
+        return;
+    if (instant)
+        SetCursorPos(x, y);
+    else
+        SmoothMouseMove(x, y, 16);
+    HoldShift();
+    Sleep(18);
+    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+    Sleep(12);
+    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+}
+
+static bool WaitForInventoryGui(JNIEnv* env, int ms) {
+    g_guiAck.store(0);
+    g_guiCmd.store(1);
+    const int slices = (std::max)(1, ms / 20);
+    for (int i = 0; i < slices; i++) {
+        if (Minecraft::IsPlayerInventoryScreen(env))
+            return true;
+        Sleep(20);
+    }
+    return Minecraft::IsPlayerInventoryScreen(env);
+}
+
+static void RequestCloseInventory() {
+    g_guiAck.store(0);
+    g_guiCmd.store(2);
 }
 
 static void ClickLegit(JNIEnv* env, int slot, int reelSpeed, jobject container, jobject player) {
@@ -338,129 +464,100 @@ static void ClickLegit(JNIEnv* env, int slot, int reelSpeed, jobject container, 
     if (reelSpeed >= 2) WaitTicks(1);
     else Sleep(20);
     if (!g_legitActive.load()) return;
+    HoldShift();
+    Sleep(18);
     int clicks = reelSpeed == 0 ? 9 : std::clamp(3 - reelSpeed, 1, 3);
     for (int i = 0; i < clicks; i++) {
         mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+        Sleep(12);
         mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+        if (i + 1 < clicks) Sleep(8);
     }
 }
 
 static bool RunRefill(JNIEnv* env) {
     jobject playerObj = Minecraft::GetThePlayer(env);
-    if (!playerObj) return false;
+    if (!playerObj) { RefillLog("fail: no player"); return false; }
     auto* player = (Player*)playerObj;
 
     jobject invObj = player->GetInventoryPlayer(env);
-    if (!invObj) { env->DeleteLocalRef(playerObj); return false; }
+    if (!invObj) { RefillLog("fail: no inventory"); env->DeleteLocalRef(playerObj); return false; }
     auto* inv = (InventoryPlayer*)invObj;
 
     if (inv->IsHotbarFull(env)) {
+        RefillLog("fail: hotbar full");
         env->DeleteLocalRef(invObj);
         env->DeleteLocalRef(playerObj);
         return false;
     }
-
-    jobject gsObj = Minecraft::GetGameSettings(env);
-    if (!gsObj) {
-        env->DeleteLocalRef(invObj);
-        env->DeleteLocalRef(playerObj);
-        return false;
-    }
-    auto* gs = (GameSettings*)gsObj;
-    jobject invBind = gs->GetKeyBindInventory(env);
-    jobject fwdBind = gs->GetKeyBindForward(env);
-    if (!invBind || !fwdBind) {
-        if (invBind) env->DeleteLocalRef(invBind);
-        if (fwdBind) env->DeleteLocalRef(fwdBind);
-        env->DeleteLocalRef(gsObj);
-        env->DeleteLocalRef(invObj);
-        env->DeleteLocalRef(playerObj);
-        return false;
-    }
-    auto* keyInv = (KeyBinding*)invBind;
-    auto* keyFwd = (KeyBinding*)fwdBind;
-    bool wasForward = keyFwd->IsPressed(env);
 
     int lastSlot = AutoRefillSettings::randomMode ? -1 : 0;
     int lastIndex = 0;
     int patternIndex = 0;
     std::unordered_set<int> planned;
     if (FindSlot(inv, env, planned, lastSlot, lastIndex, patternIndex) == -1) {
-        env->DeleteLocalRef(invBind);
-        env->DeleteLocalRef(fwdBind);
-        env->DeleteLocalRef(gsObj);
+        int sample = -1;
+        for (int i = 9; i < 36; i++) {
+            jobject s = inv->GetStackInSlot(i, env);
+            if (!s) continue;
+            sample = ((ItemStack*)s)->GetItemId(env);
+            int dmg = ((ItemStack*)s)->GetMetadata(env);
+            RefillLog("sample slot %d id=%d dmg=%d", i, sample, dmg);
+            env->DeleteLocalRef(s);
+            break;
+        }
+        RefillLog("fail: no pot/soup in inv (itemMode=%d)", AutoRefillSettings::itemMode);
         env->DeleteLocalRef(invObj);
         env->DeleteLocalRef(playerObj);
         return false;
     }
 
     NotificationSettings::PushInfo("AutoRefill", "used", "Combat");
-    g_busy = true;
-    keyInv->SetPressTime(1, env);
-
-    jobject screen = nullptr;
-    for (int i = 0; i < 50; i++) {
-        if (keyInv->GetPressTime(env) == 0)
-            keyInv->SetPressTime(1, env);
-        Sleep(20);
-        if (screen) env->DeleteLocalRef(screen);
-        screen = Minecraft::GetCurrentScreen(env);
-        if (screen) break;
-    }
-    if (!screen) {
-        keyFwd->SetPressed(wasForward, env);
-        g_busy = false;
-        env->DeleteLocalRef(invBind);
-        env->DeleteLocalRef(fwdBind);
-        env->DeleteLocalRef(gsObj);
-        env->DeleteLocalRef(invObj);
-        env->DeleteLocalRef(playerObj);
-        return false;
-    }
-    env->DeleteLocalRef(screen);
-
-    jobject container = player->GetOpenContainer(env);
-    if (!container) {
-        player->CloseScreen(env);
-        keyFwd->SetPressed(wasForward, env);
-        g_busy = false;
-        env->DeleteLocalRef(invBind);
-        env->DeleteLocalRef(fwdBind);
-        env->DeleteLocalRef(gsObj);
-        env->DeleteLocalRef(invObj);
-        env->DeleteLocalRef(playerObj);
-        return false;
-    }
-
     const int mode = AutoRefillSettings::mode;
+    RefillLog("start refill mode=%d", mode);
+    g_busy = true;
+
+    jobject container = nullptr;
+    jobject screen = nullptr;
+    bool opened = false;
+    bool alreadyOpen = Minecraft::IsPlayerInventoryScreen(env);
+    bool dontClose = alreadyOpen;
+    if (alreadyOpen) {
+        opened = true;
+        RefillLog("already in inv");
+    } else {
+        opened = WaitForInventoryGui(env, 1500);
+        RefillLog("open gui=%d ack=%d", opened ? 1 : 0, g_guiAck.load());
+        if (opened) Sleep(80);
+    }
+
+    if (opened) {
+        screen = Minecraft::GetCurrentScreen(env);
+        JniOk(env);
+        if (screen)
+            container = GetContainerFromScreen(env, screen);
+        if (!container)
+            container = player->GetOpenContainer(env);
+        JniOk(env);
+    }
+
     const int reelSpeed = 10 - AutoRefillSettings::speed;
     bool wasLmb = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    const bool useLegitMouse = opened && container && mode == 1;
 
-    if (mode == 1) {
+    if (mode == 2) timeBeginPeriod(1);
+    if (useLegitMouse)
         g_legitActive = true;
-        WaitTicks(1);
-        keybd_event(VK_SHIFT, 0, 0, 0);
-    } else if (mode == 2) {
-        timeBeginPeriod(1);
-    }
 
     lastSlot = AutoRefillSettings::randomMode ? -1 : 0;
     lastIndex = 0;
     patternIndex = 0;
     planned.clear();
 
-    if (mode == 0) {
-        int iter = 0;
-        while (!inv->IsHotbarFull(env) && iter++ < 100) {
-            jobject s = Minecraft::GetCurrentScreen(env);
-            if (!s) break;
-            env->DeleteLocalRef(s);
-            int slot = FindSlot(inv, env, planned, lastSlot, lastIndex, patternIndex);
-            if (slot == -1) break;
-            DoWindowClick(env, GetWindowId(container, env), slot, playerObj);
-            lastSlot = slot;
-        }
-    } else {
+    int moved = 0;
+    const bool instant = (mode == 0);
+
+    if (opened && container) {
         const int empty = inv->CountEmptyHotbarSlots(env);
         std::vector<int> toClick;
         for (int i = 0; i < empty; i++) {
@@ -470,55 +567,57 @@ static bool RunRefill(JNIEnv* env) {
             toClick.push_back(slot);
             lastSlot = slot;
         }
-        if (mode == 2) {
-            if (reelSpeed <= 0) {
-                int wid = GetWindowId(container, env);
-                for (int slot : toClick)
-                    DoWindowClick(env, wid, slot, playerObj);
-            } else {
-                int wid = GetWindowId(container, env);
-                for (size_t i = 0; i < toClick.size(); i++) {
-                    DoWindowClick(env, wid, toClick[i], playerObj);
-                    if (i + 1 < toClick.size())
-                        Sleep(reelSpeed * 50);
-                }
+        for (size_t i = 0; i < toClick.size(); i++) {
+            if (inv->IsHotbarFull(env))
+                break;
+            jobject stack = inv->GetStackInSlot(toClick[i], env);
+            bool still = false;
+            if (stack) {
+                still = MatchesItemMode(GetHealType((ItemStack*)stack, env));
+                env->DeleteLocalRef(stack);
             }
-        } else {
-            for (int slot : toClick) {
-                jobject s = Minecraft::GetCurrentScreen(env);
-                if (!s) break;
-                env->DeleteLocalRef(s);
-                ClickLegit(env, slot, reelSpeed, container, playerObj);
+            if (!still)
+                continue;
+            if (useLegitMouse) {
+                ClickLegit(env, toClick[i], reelSpeed, container, playerObj);
                 if (!g_legitActive.load()) break;
+            } else {
+                ShiftClickSlot(env, container, toClick[i], instant);
             }
+            moved++;
+            if (mode == 0)
+                Sleep(25);
+            else if (mode == 2 && reelSpeed > 0 && i + 1 < toClick.size())
+                Sleep(reelSpeed * 50);
         }
     }
 
-    if (mode == 1) {
-        WaitTicks(1);
-        if (wasLmb) mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-        keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, 0);
-        g_legitActive = false;
-    } else if (mode == 2) {
-        timeEndPeriod(1);
-        if (wasLmb) mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-    }
+    Sleep(20);
+    ReleaseShift();
+    g_legitActive = false;
+    if (mode == 2) timeEndPeriod(1);
+    if (wasLmb) mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
 
-    Sleep(50);
-    jobject after = Minecraft::GetCurrentScreen(env);
-    if (after) {
+    if (opened && !dontClose) {
+        Sleep(80);
+        RequestCloseInventory();
         player->CloseScreen(env);
-        env->DeleteLocalRef(after);
+        INPUT in[2]{};
+        in[0].type = INPUT_KEYBOARD;
+        in[0].ki.wVk = 'E';
+        in[1] = in[0];
+        in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(2, in, sizeof(INPUT));
+        for (int i = 0; i < 40 && Minecraft::IsPlayerInventoryScreen(env); i++)
+            Sleep(20);
     }
-    keyFwd->SetPressed(wasForward, env);
-
-    env->DeleteLocalRef(container);
-    env->DeleteLocalRef(invBind);
-    env->DeleteLocalRef(fwdBind);
-    env->DeleteLocalRef(gsObj);
+    RefillLog("moved=%d", moved);
+    if (container) env->DeleteLocalRef(container);
+    if (screen) env->DeleteLocalRef(screen);
     env->DeleteLocalRef(invObj);
     env->DeleteLocalRef(playerObj);
     g_busy = false;
+    RefillLog("done");
     return true;
 }
 
@@ -536,16 +635,30 @@ static void RefillThreadProc() {
     }
     InitPatterns();
     while (g_running) {
-        if (!g_doRefill.exchange(false)) {
+        if (!g_doRefill.load()) {
             Sleep(15);
             continue;
         }
-        if (!env) continue;
-        if (Overlay::isOpen) continue;
-        if (!IsGameWindowFocused()) continue;
+        if (Overlay::isOpen || !env) {
+            Sleep(15);
+            continue;
+        }
+        g_doRefill = false;
         RunRefill(env);
     }
     if (attached && jvm) jvm->DetachCurrentThread();
+}
+
+void AutoRefill::OnRender(JNIEnv* env) {
+    if (!env) return;
+    int cmd = g_guiCmd.exchange(0);
+    if (cmd == 1) {
+        bool ok = Minecraft::OpenPlayerInventory(env);
+        g_guiAck.store(ok ? 1 : -1);
+    } else if (cmd == 2) {
+        Minecraft::ClosePlayerInventory(env);
+        g_guiAck.store(1);
+    }
 }
 
 void AutoRefill_Trigger() { g_doRefill = true; }
@@ -562,9 +675,23 @@ void AutoRefill_Stop() {
     g_doRefill = false;
     g_legitActive = false;
     g_busy = false;
+    ReleaseShift();
     if (g_refillThread.joinable()) g_refillThread.join();
 }
 
 void AutoRefill::Run(JNIEnv* env) {
-    Sleep(50);
+    static bool held = false;
+    if (MenuBinds::ar_listening) {
+        held = false;
+        return;
+    }
+    const int bind = MenuBinds::ar_bind;
+    bool now = bind != 0 && (GetAsyncKeyState(bind) & 0x8000) != 0;
+    bool fire = now && !held;
+    held = now;
+    if (!fire) return;
+    if (g_busy.load()) return;
+    RefillLog("key fire bind=%d overlay=%d", bind, Overlay::isOpen ? 1 : 0);
+    InitPatterns();
+    RunRefill(env);
 }

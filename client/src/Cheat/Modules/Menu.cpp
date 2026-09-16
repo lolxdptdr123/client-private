@@ -8,33 +8,58 @@
 #include "Combat/AimAssist.h"
 #include "Combat/velocity.h"
 #include "Misc/Friends.h"
+#include "Misc/Weapons.h"
 #include "Misc/Enemies.h"
+#include "Misc/NoItemRelease.h"
+#include "Misc/AntiDebuff.h"
+#include "Misc/PingFix.h"
+#include "Misc/RightClicker.h"
+#include "Misc/BowBoost.h"
 #include "../Config.h"
 #include "Misc/FastPlace.h"
 #include "Misc/FastBreak.h"
+#include "Misc/AutoTool.h"
+#include "Misc/ChestStealer.h"
+#include "Misc/InvManager.h"
+#include "Misc/BridgeAssist.h"
+#include "Misc/BlockIn.h"
+#include "Misc/Clutch.h"
 #include "Misc/TickLocker.h"
 #include "Misc/InvWalk.h"
 #include "Misc/FastStop.h"
 #include "Misc/NoJumpDelay.h"
 #include "Misc/QuickAccel.h"
 #include "Misc/SnapTap.h"
+#include "Misc/Sprint.h"
+#include "Misc/NoSlow.h"
+#include "Misc/Strafe.h"
 #include "Combat/AutoRefill.h"
 #include "Combat/Throw.h"
-#include "Combat/Piercing.h"
 #include "Combat/KeepSprint.h"
 #include "Combat/Criticals.h"
+#include "Combat/SprintReset.h"
+#include "Combat/LagRange.h"
+#include "Combat/Reach.h"
+#include "Combat/Blink.h"
 #include "Combat/AutoRod.h"
 #include "Combat/AntiBot.h"
+#include "Combat/AutoBlock.h"
+#include "Combat/Backtrack.h"
+#include "Combat/AutoWeapon.h"
 #include "Visuals/ArrayList.h"
 #include "Visuals/Chams.h"
 #include "Visuals/Esp.h"
 #include "Visuals/ItemEsp.h"
 #include "Visuals/PlayerEsp.h"
 #include "Visuals/StorageEsp.h"
+#include "Visuals/BlockEsp.h"
 #include "Visuals/Nametag.h"
 #include "Visuals/Tracer.h"
 #include "Visuals/Trajectories.h"
 #include "Visuals/Notifications.h"
+#include "Visuals/Pointers.h"
+#include "Visuals/Indicators.h"
+#include "Visuals/NoHurtCam.h"
 #include "Misc/Overlay.h"
 #include "Misc/Scroll.h"
 #include "Misc/armor.h"
@@ -45,6 +70,10 @@
 
 #include "../../../vendors/imgui/imgui.h"
 #include <cmath>
+#include <cctype>
+#include <cstring>
+#include <fstream>
+#include <shellapi.h>
 
 extern void Armor_Request_Scan();
 extern void Armor_Trigger_Manual();
@@ -52,17 +81,17 @@ extern void Armor_Trigger_Manual();
 static ULONGLONG g_bindReleasedAt = 0;
 
 // ====================================================================
-//  THEME — dark cards, orange accent (Snap-style)
+//  THEME — dark cards, blue accent
 // ====================================================================
-static const ImVec4 AC = { 1.00f, 0.548f, 0.220f, 1.00f };
-static const ImVec4 AC_H = { 1.00f, 0.66f, 0.36f, 1.00f };
-static const ImVec4 AC_DIM = { 0.86f, 0.42f, 0.14f, 1.00f };
+static ImVec4 AC = { 0.32f, 0.62f, 0.98f, 1.00f };
+static ImVec4 AC_H = { 0.46f, 0.72f, 1.00f, 1.00f };
+static ImVec4 AC_DIM = { 0.22f, 0.44f, 0.78f, 1.00f };
 
-static const ImVec4 BG0 = { 0.102f, 0.102f, 0.102f, 0.94f };
-static const ImVec4 BG1 = { 0.13f, 0.13f, 0.13f, 0.96f };
-static const ImVec4 BG2 = { 0.18f, 0.18f, 0.18f, 1.00f };
-static const ImVec4 BG3 = { 0.24f, 0.24f, 0.24f, 1.00f };
-static const ImVec4 BG_CARD = { 0.145f, 0.145f, 0.145f, 1.00f };
+static const ImVec4 BG0 = { 0.090f, 0.090f, 0.090f, 0.97f };
+static const ImVec4 BG1 = { 0.12f, 0.12f, 0.12f, 0.98f };
+static const ImVec4 BG2 = { 0.17f, 0.17f, 0.17f, 1.00f };
+static const ImVec4 BG3 = { 0.23f, 0.23f, 0.23f, 1.00f };
+static const ImVec4 BG_CARD = { 0.133f, 0.133f, 0.133f, 1.00f };
 
 static const ImVec4 TEXT = { 0.92f, 0.92f, 0.92f, 1.00f };
 static const ImVec4 TEXT_DIM = { 0.55f, 0.55f, 0.55f, 1.00f };
@@ -73,22 +102,29 @@ static const ImVec4 RED = { 0.81f, 0.36f, 0.36f, 1.00f };
 static const ImVec4 RED_H = { 0.92f, 0.46f, 0.46f, 1.00f };
 
 static void ApplyTheme() {
+    static bool guiLoaded = false;
+    if (!guiLoaded) { GuiSettings::Load(); guiLoaded = true; }
+
+    AC = { GuiSettings::accent[0], GuiSettings::accent[1], GuiSettings::accent[2], GuiSettings::accent[3] };
+    AC_H = { (std::min)(1.f, AC.x + 0.12f), (std::min)(1.f, AC.y + 0.12f), (std::min)(1.f, AC.z + 0.14f), 1.f };
+    AC_DIM = { AC.x * 0.86f, AC.y * 0.76f, AC.z * 0.64f, 1.f };
+
     ImGuiStyle& s = ImGui::GetStyle();
 
-    s.WindowRounding = 16.f;
-    s.ChildRounding = 12.f;
-    s.FrameRounding = 14.f;
+    s.WindowRounding = 22.f;
+    s.ChildRounding = 14.f;
+    s.FrameRounding = 16.f;
     s.GrabRounding = 12.f;
-    s.PopupRounding = 8.f;
-    s.ScrollbarRounding = 6.f;
-    s.TabRounding = 12.f;
+    s.PopupRounding = 10.f;
+    s.ScrollbarRounding = 8.f;
+    s.TabRounding = 14.f;
 
-    s.FramePadding = { 9.f, 5.f };
-    s.ItemSpacing = { 8.f, 8.f };
-    s.WindowPadding = { 16.f, 14.f };
+    s.FramePadding = { 10.f, 6.f };
+    s.ItemSpacing = { 8.f, 7.f };
+    s.WindowPadding = { 18.f, 16.f };
     s.WindowBorderSize = 0.f;
     s.ChildBorderSize = 0.f;
-    s.ScrollbarSize = 4.f;
+    s.ScrollbarSize = 5.f;
 
     ImVec4* c = s.Colors;
     c[ImGuiCol_WindowBg] = BG0;
@@ -121,6 +157,53 @@ static void ApplyTheme() {
     c[ImGuiCol_PopupBg] = BG1;
 }
 
+static std::string GuiFilePath() {
+    char app[MAX_PATH]{};
+    GetEnvironmentVariableA("APPDATA", app, MAX_PATH);
+    std::string dir = std::string(app) + "\\lolxd";
+    CreateDirectoryA(dir.c_str(), nullptr);
+    return dir + "\\gui.ini";
+}
+
+void GuiSettings::Load() {
+    std::ifstream in(GuiFilePath());
+    if (!in) return;
+    std::string line;
+    while (std::getline(in, line)) {
+        auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string k = line.substr(0, eq);
+        std::string v = line.substr(eq + 1);
+        if (k == "scale") scale = std::clamp((float)atof(v.c_str()), 0.6f, 2.f);
+        else if (k == "allowInput") allowInput = (v == "1");
+        else if (k == "compact") compact = (v == "1");
+        else if (k == "wide") wide = (v == "1");
+        else if (k == "open_bind") MenuBinds::open_bind = atoi(v.c_str());
+        else if (k == "accent") {
+            float a, b, c, d;
+            if (sscanf_s(v.c_str(), "%f,%f,%f,%f", &a, &b, &c, &d) == 4) {
+                accent[0] = a; accent[1] = b; accent[2] = c; accent[3] = d;
+            }
+        }
+    }
+    if (fabsf(accent[0] - 1.00f) < 0.04f && fabsf(accent[1] - 0.548f) < 0.06f
+        && fabsf(accent[2] - 0.220f) < 0.06f) {
+        accent[0] = 0.32f; accent[1] = 0.62f; accent[2] = 0.98f; accent[3] = 1.00f;
+        Save();
+    }
+}
+
+void GuiSettings::Save() {
+    std::ofstream out(GuiFilePath(), std::ios::trunc);
+    if (!out) return;
+    out << "scale=" << scale << "\n";
+    out << "allowInput=" << (allowInput ? 1 : 0) << "\n";
+    out << "compact=" << (compact ? 1 : 0) << "\n";
+    out << "wide=" << (wide ? 1 : 0) << "\n";
+    out << "open_bind=" << MenuBinds::open_bind << "\n";
+    out << "accent=" << accent[0] << "," << accent[1] << "," << accent[2] << "," << accent[3] << "\n";
+}
+
 // ====================================================================
 //  HELPERS
 // ====================================================================
@@ -135,11 +218,17 @@ static bool AnyListening() {
         || MenuBinds::ntag_listening
         || MenuBinds::tr_listening
         || MenuBinds::tj_listening
-        || MenuBinds::prc_listening
         || MenuBinds::ks_listening
         || MenuBinds::cr_listening
+        || MenuBinds::sr_listening
+        || MenuBinds::lr_listening
+        || MenuBinds::reach_listening
+        || MenuBinds::blink_listening
         || MenuBinds::rod_listening
         || MenuBinds::ab_listening
+        || MenuBinds::ablock_listening
+        || MenuBinds::bt_listening
+        || MenuBinds::aw_listening
         || AimAssistSettings::keepBindListening
         || MenuBinds::ar_listening
         || ThrowSettings::potListening || ThrowSettings::soupListening
@@ -147,8 +236,16 @@ static bool AnyListening() {
         || MenuBinds::notif_listening
         || MenuBinds::fr_listening
         || MenuBinds::en_listening
+        || MenuBinds::nir_listening
+        || MenuBinds::ad_listening
         || MenuBinds::fp_listening
         || MenuBinds::fb_listening
+        || MenuBinds::at_listening
+        || MenuBinds::cs_listening
+        || MenuBinds::im_listening
+        || MenuBinds::ba_listening
+        || MenuBinds::bi_listening
+        || MenuBinds::clutch_listening
         || MenuBinds::tl_listening
         || MenuBinds::tl_target_listening
         || MenuBinds::iw_listening
@@ -156,6 +253,9 @@ static bool AnyListening() {
         || MenuBinds::njd_listening
         || MenuBinds::qa_listening
         || MenuBinds::st_listening
+        || MenuBinds::sp_listening
+        || MenuBinds::ns_listening
+        || MenuBinds::strf_listening
         || MenuBinds::destruct_listening || MenuBinds::open_listening
         || Scroll::scroll_listen
         || Armor::listening
@@ -172,20 +272,41 @@ void ClientMenu::DrawBindButton(const char* id, int& key, bool& listening) {
         ? "..."
         : (key == 0 ? "NONE" : MenuBinds::VKToString(key));
     ImVec2 ts = ImGui::CalcTextSize(text.c_str());
-    float bw = (std::max)(ts.x + 14.f, 36.f);
-    float bh = 18.f;
+    float bw = (std::max)(ts.x + 12.f, 34.f);
+    float bh = 16.f;
 
     ImVec2 pos = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 bg = listening ? IM_COL32(70, 48, 20, 255) : IM_COL32(48, 48, 48, 255);
-    ImU32 fg = listening ? IM_COL32(255, 170, 60, 255) : IM_COL32(170, 170, 170, 255);
+    bool& hold = MenuBinds::Hold(key);
+    ImU32 bg = listening ? IM_COL32(28, 48, 86, 230)
+        : (hold ? ImGui::ColorConvertFloat4ToU32(AC_DIM) : IM_COL32(38, 38, 38, 255));
+    ImU32 fg = listening ? ImGui::ColorConvertFloat4ToU32(AC_H) : IM_COL32(140, 140, 140, 255);
 
-    if (ImGui::InvisibleButton(id, { bw, bh }) && !listening)
-        listening = true;
-    if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    if (ImGui::InvisibleButton(id, { bw, bh })) {
+        if (listening) { key = 0; listening = false; g_bindReleasedAt = GetTickCount64(); }
+        else listening = true;
+    }
+    bool hovered = ImGui::IsItemHovered();
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
-    dl->AddRectFilled(pos, { pos.x + bw, pos.y + bh }, bg, 6.f);
+    dl->AddRectFilled(pos, { pos.x + bw, pos.y + bh }, bg, 5.f);
     dl->AddText({ pos.x + (bw - ts.x) * 0.5f, pos.y + (bh - ts.y) * 0.5f }, fg, text.c_str());
+
+    if (hovered && !listening) {
+        const char* ht = "HOLD";
+        ImVec2 hts = ImGui::CalcTextSize(ht);
+        float hw = hts.x + 10.f;
+        ImVec2 hp{ pos.x + bw + 5.f, pos.y };
+        ImGui::SetCursorScreenPos(hp);
+        if (ImGui::InvisibleButton((std::string("HOLD##") + id).c_str(), { hw, bh })) {
+            hold = !hold;
+            GuiSettings::Save();
+        }
+        ImU32 hbg = hold ? ImGui::ColorConvertFloat4ToU32(AC) : IM_COL32(48, 48, 48, 255);
+        ImU32 hfg = hold ? IM_COL32(20, 20, 20, 255) : IM_COL32(170, 170, 170, 255);
+        dl->AddRectFilled(hp, { hp.x + hw, hp.y + bh }, hbg, 5.f);
+        dl->AddText({ hp.x + (hw - hts.x) * 0.5f, hp.y + (bh - hts.y) * 0.5f }, hfg, ht);
+    }
 
     if (listening) {
         for (int vk = 1; vk < 256; vk++) {
@@ -277,64 +398,118 @@ bool ClientMenu::ExpandButton(const char* label) {
     return expanded;
 }
 
+static void BeginMenuScrollChild(const char* id, const ImVec2& size) {
+    static std::unordered_map<std::string, float> s_maxY;
+    const float prev = s_maxY[id];
+    ImGuiWindowFlags flags = 0;
+    if (prev < 12.f)
+        flags |= ImGuiWindowFlags_NoScrollWithMouse;
+    ImGui::BeginChild(id, size, false, flags);
+    const float maxY = ImGui::GetScrollMaxY();
+    s_maxY[id] = maxY;
+    if (maxY < 12.f)
+        ImGui::SetScrollY(0.f);
+}
+static bool s_cardOpen = false;
+static bool s_cardExpanded = false;
+static ImDrawList* s_cardDl = nullptr;
+static float s_cardW = 0.f;
+static const float kCardPad = 14.f;
+
+static void CloseSnapCard() {
+    if (!s_cardOpen) return;
+    if (s_cardExpanded) {
+        ImGui::PopItemWidth();
+        ImGui::Unindent(kCardPad);
+        s_cardExpanded = false;
+    }
+    ImGui::Dummy({ 0.f, 10.f });
+    ImGui::EndGroup();
+    ImVec2 a = ImGui::GetItemRectMin();
+    ImVec2 b = ImGui::GetItemRectMax();
+    if (s_cardDl) {
+        s_cardDl->ChannelsSetCurrent(0);
+        s_cardDl->AddRectFilled(a, { a.x + s_cardW, b.y },
+            ImGui::ColorConvertFloat4ToU32(BG_CARD), 14.f);
+        s_cardDl->ChannelsMerge();
+    }
+    s_cardOpen = false;
+    s_cardDl = nullptr;
+    ImGui::Dummy({ 0.f, 8.f });
+}
+
 bool ClientMenu::SnapCard(const char* name, const char* desc, bool* enabled, int* bind, bool* listening) {
+    CloseSnapCard();
+
     bool& expanded = m_expanded[name];
-    float W = ImGui::GetContentRegionAvail().x;
-    const float cardH = 64.f;
+    const bool compact = GuiSettings::compact;
     bool on = enabled && *enabled;
+    s_cardW = ImGui::GetContentRegionAvail().x;
+    s_cardDl = ImGui::GetWindowDrawList();
+    s_cardDl->ChannelsSplit(2);
+    s_cardDl->ChannelsSetCurrent(1);
+    s_cardOpen = true;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.f, 0.f, 0.f, 0.f });
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.f);
-    ImGui::BeginChild((std::string("##snap_") + name).c_str(),
-        { W, cardH }, false, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PushID(name);
+    ImGui::BeginGroup();
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImGui::Dummy({ s_cardW, 0.01f });
+    ImGui::Dummy({ 0.f, 10.f });
 
-    const float cw = ImGui::GetWindowSize().x;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 wp = ImGui::GetWindowPos();
-    dl->AddRectFilled(wp, { wp.x + cw, wp.y + cardH },
-        ImGui::ColorConvertFloat4ToU32(BG_CARD), 12.f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + kCardPad);
+    const float titleY = ImGui::GetCursorPosY();
+    const float leftX = ImGui::GetCursorPosX();
 
-    ImGui::SetCursorPos({ 14.f, 10.f });
-    ImGui::TextColored(on ? TEXT : ImVec4{ 0.72f, 0.72f, 0.72f, 1.f }, "%s", name);
-
+    ImGui::TextColored(on ? TEXT : ImVec4{ 0.78f, 0.78f, 0.78f, 1.f }, "%s", name);
     if (bind && listening) {
         ImGui::SameLine(0.f, 8.f);
-        ImGui::SetCursorPosY(10.f);
+        ImGui::SetCursorPosY(titleY + 2.f);
         DrawBindButton((std::string("bdg_") + name).c_str(), *bind, *listening);
     }
 
     if (enabled) {
-        ImGui::SetCursorPos({ cw - 48.f, 12.f });
+        ImGui::SetCursorScreenPos({ origin.x + s_cardW - kCardPad - 36.f, origin.y + 12.f });
         PhantomToggle((std::string("##tog_") + name).c_str(), *enabled);
     }
 
-    ImGui::SetCursorPos({ 14.f, 36.f });
+    const float plus = 26.f;
+    ImGui::SetCursorPos({ leftX, titleY + ImGui::GetTextLineHeightWithSpacing() + 6.f });
+    ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 plusPos = ImGui::GetCursorScreenPos();
-    std::string plusId = std::string("##plus_") + name;
-    if (ImGui::InvisibleButton(plusId.c_str(), { 18.f, 18.f }))
+    if (ImGui::InvisibleButton("##plus", { plus, plus }))
         expanded = !expanded;
     if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-    dl->AddRectFilled(plusPos, { plusPos.x + 18.f, plusPos.y + 18.f },
-        IM_COL32(32, 32, 32, 255), 4.f);
-    ImU32 plusCol = expanded ? IM_COL32(230, 230, 230, 255) : IM_COL32(200, 200, 200, 255);
-    dl->AddRectFilled({ plusPos.x + 4.f, plusPos.y + 8.f }, { plusPos.x + 14.f, plusPos.y + 10.f }, plusCol, 1.f);
+    dl->AddRectFilled(plusPos, { plusPos.x + plus, plusPos.y + plus },
+        IM_COL32(28, 28, 28, 255), 6.f);
+    ImU32 plusCol = expanded ? IM_COL32(235, 235, 235, 255) : IM_COL32(200, 200, 200, 255);
+    const float pcx = plusPos.x + plus * 0.5f;
+    const float pcy = plusPos.y + plus * 0.5f;
+    dl->AddRectFilled({ pcx - 7.f, pcy - 1.5f }, { pcx + 7.f, pcy + 1.5f }, plusCol, 1.f);
     if (!expanded)
-        dl->AddRectFilled({ plusPos.x + 8.f, plusPos.y + 4.f }, { plusPos.x + 10.f, plusPos.y + 14.f }, plusCol, 1.f);
+        dl->AddRectFilled({ pcx - 1.5f, pcy - 7.f }, { pcx + 1.5f, pcy + 7.f }, plusCol, 1.f);
 
-    if (desc && desc[0]) {
-        ImGui::SetCursorPos({ 38.f, 38.f });
-        ImGui::PushTextWrapPos(cw - 16.f);
+    if (!compact && desc && desc[0]) {
+        ImGui::SameLine(0.f, 8.f);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (plus - ImGui::GetTextLineHeight()) * 0.5f);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + s_cardW - kCardPad * 2.f - plus - 8.f);
         ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
         ImGui::TextUnformatted(desc);
         ImGui::PopStyleColor();
         ImGui::PopTextWrapPos();
     }
 
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
-    ImGui::Dummy({ 0.f, 6.f });
-    return expanded;
+    ImGui::PopID();
+
+    if (expanded) {
+        s_cardExpanded = true;
+        ImGui::Dummy({ 0.f, 6.f });
+        ImGui::Indent(kCardPad);
+        ImGui::PushItemWidth(s_cardW - kCardPad * 2.f);
+        return true;
+    }
+
+    CloseSnapCard();
+    return false;
 }
 
 static bool PhantomSliderCore(const char* label, const char* id, float& v, float mn, float mx, const char* fmt, bool asInt) {
@@ -355,6 +530,30 @@ static bool PhantomSliderCore(const char* label, const char* id, float& v, float
     ImGui::InvisibleButton("##sl", { W, totalH });
     const bool hovered = ImGui::IsItemHovered();
     const bool active = ImGui::IsItemActive();
+    static std::string s_editId;
+    static char s_editBuf[32];
+    const bool ctrlClick = hovered && ImGui::GetIO().KeyCtrl && ImGui::IsMouseClicked(0);
+    if (ctrlClick) {
+        s_editId = id;
+        if (asInt) snprintf(s_editBuf, sizeof(s_editBuf), "%d", (int)lroundf(v));
+        else snprintf(s_editBuf, sizeof(s_editBuf), fmt, v);
+    }
+    if (s_editId == id) {
+        ImGui::SetCursorScreenPos(origin);
+        ImGui::SetNextItemWidth(W);
+        ImGui::SetKeyboardFocusHere();
+        bool done = ImGui::InputText("##typed", s_editBuf, sizeof(s_editBuf),
+            ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal);
+        if (done || (!ImGui::IsItemActive() && !ctrlClick)) {
+            float nv = (float)atof(s_editBuf);
+            v = std::clamp(nv, mn, mx);
+            if (asInt) v = (float)(int)lroundf(v);
+            s_editId.clear();
+        }
+        ImGui::PopID();
+        ImGui::Spacing();
+        return true;
+    }
     if (hovered || active) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
     const float span = mx - mn;
@@ -384,7 +583,8 @@ static bool PhantomSliderCore(const char* label, const char* id, float& v, float
 
     const float hoverT = AnimTowards(ImGui::GetItemID() ^ 0x51u, (hovered || active) ? 1.f : 0.f, 18.f);
     const float r = knobR + hoverT * 1.4f;
-    dl->AddCircleFilled({ fillX, trackY }, r + 1.2f, IM_COL32(255, 140, 50, 70));
+    ImVec4 glow = AC; glow.w = 0.28f;
+    dl->AddCircleFilled({ fillX, trackY }, r + 1.2f, ImGui::ColorConvertFloat4ToU32(glow));
     dl->AddCircleFilled({ fillX, trackY }, r, colFill);
 
     char buf[64];
@@ -426,13 +626,13 @@ static void PhantomCombo(const char* label, const char* id, int& v, const char**
 }
 
 static bool PhantomRangeSliderFloat(const char* id, float& vMin, float& vMax,
-    float rangeMin, float rangeMax)
+    float rangeMin, float rangeMax, const char* fmt = "%.0f° - %.0f°")
 {
     if (vMin > vMax) std::swap(vMin, vMax);
     vMin = std::clamp(vMin, rangeMin, rangeMax);
     vMax = std::clamp(vMax, rangeMin, rangeMax);
 
-    ImGui::TextColored(TEXT, "%.0f° - %.0f°", vMin, vMax);
+    ImGui::TextColored(TEXT, fmt, vMin, vMax);
 
     ImGui::PushID(id);
     const float w = ImGui::GetContentRegionAvail().x - 2.f;
@@ -526,7 +726,7 @@ void ClientMenu::RenderCombatTab()
     float colW = (W - 10.f) * 0.5f;
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.f, 0.f, 0.f, 0.f });
-    ImGui::BeginChild("##col_left", { colW, 0.f }, false);
+    BeginMenuScrollChild("##col_left", { colW, 0.f });
 
     {
         AimAssist* aa = nullptr;
@@ -580,6 +780,21 @@ void ClientMenu::RenderCombatTab()
     }
 
     {
+        AutoWeapon* aw = nullptr;
+        for (auto* m : Modules::GetRegisteredModules())
+            if ((aw = dynamic_cast<AutoWeapon*>(m))) break;
+        bool open = SnapCard("Auto Weapon", "Selects your weapon when aiming on a player.",
+            aw ? &aw->enabled : nullptr, &MenuBinds::aw_bind, &MenuBinds::aw_listening);
+        if (open && aw) {
+            SectionHeader("Timing");
+            PhantomSliderInt("Activation time (ms)", "##aw_act", AutoWeaponSettings::activationMs, 0, 500);
+            SectionHeader("Bind");
+            DrawBindButton("aw_bind", MenuBinds::aw_bind, MenuBinds::aw_listening);
+            ImGui::Spacing();
+        }
+    }
+
+    {
         bool open = SnapCard("Throw", "Throws pots, soup, pearls and debuffs.",
             &ThrowSettings::enabled, nullptr, nullptr);
         if (open) {
@@ -618,47 +833,6 @@ void ClientMenu::RenderCombatTab()
     }
 
     {
-        Piercing* pr = nullptr;
-        for (auto* m : Modules::GetRegisteredModules())
-            if ((pr = dynamic_cast<Piercing*>(m))) break;
-        bool open = SnapCard("Piercing", "Allows hitting entities through obstructions.",
-            pr ? &pr->enabled : nullptr, &MenuBinds::prc_bind, &MenuBinds::prc_listening);
-        if (open && pr) {
-            SectionHeader("Conditions");
-            PhantomToggleRow("##pr_wpn", "Weapons only", PiercingSettings::weaponsOnly);
-            PhantomToggleRow("##pr_blk", "Through blocks", PiercingSettings::throughBlock);
-            PhantomToggleRow("##pr_en", "Enemies only", PiercingSettings::targetEnemiesOnly);
-            SectionHeader("Bind");
-            DrawBindButton("prc_bind", MenuBinds::prc_bind, MenuBinds::prc_listening);
-            ImGui::Spacing();
-        }
-    }
-
-    {
-        KeepSprint* ks = nullptr;
-        for (auto* m : Modules::GetRegisteredModules())
-            if ((ks = dynamic_cast<KeepSprint*>(m))) break;
-        bool open = SnapCard("KeepSprint", "Resets your sprint state to deal more knockback.",
-            ks ? &ks->enabled : nullptr, &MenuBinds::ks_bind, &MenuBinds::ks_listening);
-        if (open && ks) {
-            SectionHeader("Mode");
-            {
-                const char* modes[] = { "Dynamic", "Static" };
-                PhantomCombo("Mode", "##ks_mode", KeepSprintSettings::mode, modes, 2);
-            }
-            SectionHeader("Speed");
-            PhantomSliderFloat("Speed", "##ks_spd", KeepSprintSettings::speed, 0.6f, 1.f, "%.2f");
-            SectionHeader("Conditions");
-            PhantomSliderInt("Chance (%)", "##ks_ch", KeepSprintSettings::chance, 0, 100);
-            PhantomToggleRow("##ks_wpn", "Weapons only", KeepSprintSettings::weaponsOnly);
-            PhantomToggleRow("##ks_beh", "Only on behind", KeepSprintSettings::onlyOnBehind);
-            SectionHeader("Bind");
-            DrawBindButton("ks_bind", MenuBinds::ks_bind, MenuBinds::ks_listening);
-            ImGui::Spacing();
-        }
-    }
-
-    {
         Criticals* cr = nullptr;
         for (auto* m : Modules::GetRegisteredModules())
             if ((cr = dynamic_cast<Criticals*>(m))) break;
@@ -682,12 +856,101 @@ void ClientMenu::RenderCombatTab()
         }
     }
 
+    {
+        SprintReset* sr = nullptr;
+        for (auto* m : Modules::GetRegisteredModules())
+            if ((sr = dynamic_cast<SprintReset*>(m))) break;
+        bool open = SnapCard("Sprint Reset", "Automatically restarts your sprint after you hit a player.",
+            sr ? &sr->enabled : nullptr, &MenuBinds::sr_bind, &MenuBinds::sr_listening);
+        if (open && sr) {
+            SectionHeader("Mode");
+            {
+                const char* modes[] = { "WTap", "Sneak", "NoStop" };
+                PhantomCombo("Mode", "##sr_mode", SprintResetSettings::mode, modes, 3);
+            }
+            SectionHeader("Timing");
+            PhantomSliderInt("Delay after attack (ms)", "##sr_del", SprintResetSettings::delayMs, 0, 500);
+            PhantomSliderInt("Stop duration (ms)", "##sr_stop", SprintResetSettings::stopMs, 10, 250);
+            PhantomToggleRow("##sr_rnd", "Randomize", SprintResetSettings::randomize);
+            SectionHeader("Conditions");
+            PhantomToggleRow("##sr_dmg", "Wait for damage", SprintResetSettings::waitForDamage);
+            PhantomToggleRow("##sr_wpn", "Holding weapon", SprintResetSettings::holdingWeapon);
+            SectionHeader("Bind");
+            DrawBindButton("sr_bind", MenuBinds::sr_bind, MenuBinds::sr_listening);
+            ImGui::Spacing();
+        }
+    }
+
+    {
+        LagRange* lr = nullptr;
+        for (auto* m : Modules::GetRegisteredModules())
+            if ((lr = dynamic_cast<LagRange*>(m))) break;
+        bool open = SnapCard("LagRange", "Delays your packets while you close in so you appear further than you are.",
+            lr ? &lr->enabled : nullptr, &MenuBinds::lr_bind, &MenuBinds::lr_listening);
+        if (open && lr) {
+            SectionHeader("Mode");
+            {
+                const char* modes[] = { "Static", "Dynamic" };
+                PhantomCombo("Mode", "##lr_mode", LagRangeSettings::mode, modes, 2);
+            }
+            SectionHeader("Distance");
+            PhantomSliderFloat("Activation distance", "##lr_act", LagRangeSettings::activationDistance, 4.f, 10.f, "%.1f");
+            PhantomSliderFloat("Flush distance", "##lr_flush", LagRangeSettings::flushDistance, 0.f, 10.f, "%.1f");
+            if (LagRangeSettings::mode == 1) {
+                SectionHeader("Timing");
+                PhantomSliderInt("Delay (ms)", "##lr_del", LagRangeSettings::delay, 100, 1000);
+            }
+            SectionHeader("Conditions");
+            PhantomToggleRow("##lr_wpn", "Only weapon", LagRangeSettings::onlyWeapon);
+            PhantomToggleRow("##lr_spr", "Only sprinting", LagRangeSettings::onlySprinting);
+            SectionHeader("ESP");
+            PhantomToggleRow("##lr_box", "Draw box", LagRangeSettings::drawBox);
+            if (LagRangeSettings::drawBox) {
+                ImGui::ColorEdit4("##lr_fill", LagRangeSettings::boxColor,
+                    ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
+                    ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf);
+                ImGui::SameLine();
+                ImGui::TextDisabled("Fill");
+                ImGui::ColorEdit4("##lr_out", LagRangeSettings::outlineColor,
+                    ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
+                    ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf);
+                ImGui::SameLine();
+                ImGui::TextDisabled("Outline");
+            }
+            SectionHeader("Bind");
+            DrawBindButton("lr_bind", MenuBinds::lr_bind, MenuBinds::lr_listening);
+            ImGui::Spacing();
+        }
+    }
+
+    {
+        Reach* rc = nullptr;
+        for (auto* m : Modules::GetRegisteredModules())
+            if ((rc = dynamic_cast<Reach*>(m))) break;
+        bool open = SnapCard("Reach", "Extends the distance from which you can attack.",
+            rc ? &rc->enabled : nullptr, &MenuBinds::reach_bind, &MenuBinds::reach_listening);
+        if (open && rc) {
+            SectionHeader("Distance");
+            PhantomSliderFloat("Distance", "##rc_dist", ReachSettings::distance, 3.f, 6.f, "%.2f");
+            SectionHeader("Activate for");
+            PhantomSliderInt("Activate for (ticks)", "##rc_act", ReachSettings::activateTicks, 1, 10);
+            ImGui::TextColored(TEXT_DIM, "%d / 10 hits  —  10 = tous les hits",
+                ReachSettings::activateTicks);
+            SectionHeader("Conditions");
+            PhantomToggleRow("##rc_spr", "Only while sprinting", ReachSettings::onlySprinting);
+            SectionHeader("Bind");
+            DrawBindButton("reach_bind", MenuBinds::reach_bind, MenuBinds::reach_listening);
+            ImGui::Spacing();
+        }
+    }
+
+    CloseSnapCard();
     ImGui::EndChild();
     ImGui::PopStyleColor();
     ImGui::SameLine(0.f, 10.f);
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.f, 0.f, 0.f, 0.f });
-    ImGui::BeginChild("##col_right", { colW, 0.f }, false);
+    BeginMenuScrollChild("##col_right", { colW, 0.f });
 
     {
         bool open = SnapCard("Auto Clicker", "Clicks for you when holding down left-click.",
@@ -766,6 +1029,7 @@ void ClientMenu::RenderCombatTab()
             static const char* arItems[] = { "Potion", "Soup", "Both" };
             PhantomCombo("Item", "##ar_item", AutoRefillSettings::itemMode, arItems, 3);
             PhantomSliderInt("Speed", "##ar_speed", AutoRefillSettings::speed, 0, 10);
+            ImGui::TextColored(TEXT_DIM, "Inv deja ouvert : refill par autoclick, sans fermer.");
             PhantomToggleRow("##ar_rand", "Random slots", AutoRefillSettings::randomMode);
             if (AutoRefillSettings::mode == 1) {
                 PhantomToggleRow("##ar_dyn", "Dynamic speed", AutoRefillSettings::dynamicSpeed);
@@ -835,6 +1099,98 @@ void ClientMenu::RenderCombatTab()
         }
     }
 
+    {
+        AutoBlock* abl = nullptr;
+        for (auto* m : Modules::GetRegisteredModules())
+            if ((abl = dynamic_cast<AutoBlock*>(m))) break;
+        bool open = SnapCard("Auto Block", "Predicts incoming hits and blocks your sword.",
+            abl ? &abl->enabled : nullptr, &MenuBinds::ablock_bind, &MenuBinds::ablock_listening);
+        if (open && abl) {
+            SectionHeader("Range");
+            PhantomSliderFloat("Range", "##abl_rng", AutoBlockSettings::range, 0.5f, 6.0f, "%.1f");
+            SectionHeader("Timing");
+            PhantomSliderInt("Maximum hurt time (ms)", "##abl_ht", AutoBlockSettings::maxHurtTimeMs, 0, 500);
+            PhantomSliderInt("Maximum hold duration (ms)", "##abl_hd", AutoBlockSettings::maxHoldMs, 10, 500);
+            SectionHeader("Animation");
+            PhantomToggleRow("##abl_fa", "Force block animation", AutoBlockSettings::forceAnim);
+            if (AutoBlockSettings::forceAnim)
+                PhantomToggleRow("##abl_far", "Only when in range", AutoBlockSettings::forceAnimInRange);
+            SectionHeader("Lag");
+            PhantomSliderInt("Chance (%)", "##abl_lc", AutoBlockSettings::lagChance, 0, 100);
+            PhantomSliderInt("Maximum duration (ms)", "##abl_ld", AutoBlockSettings::lagMaxMs, 0, 500);
+            PhantomToggleRow("##abl_pda", "Prevent delaying attacks", AutoBlockSettings::preventDelayAttacks);
+            PhantomToggleRow("##abl_bai", "Block again immediately", AutoBlockSettings::blockAgainImmediately);
+            SectionHeader("Conditions");
+            PhantomToggleRow("##abl_lmb", "Left mouse button", AutoBlockSettings::condLmb);
+            PhantomToggleRow("##abl_rmb", "Right mouse button", AutoBlockSettings::condRmb);
+            PhantomToggleRow("##abl_dmg", "Damaged", AutoBlockSettings::condDamaged);
+            SectionHeader("Bind");
+            DrawBindButton("ablock_bind", MenuBinds::ablock_bind, MenuBinds::ablock_listening);
+            ImGui::Spacing();
+        }
+    }
+
+    {
+        Backtrack* bt = nullptr;
+        for (auto* m : Modules::GetRegisteredModules())
+            if ((bt = dynamic_cast<Backtrack*>(m))) break;
+        bool open = SnapCard("Backtrack", "Holds incoming packets after you hit a player so they stay hittable.",
+            bt ? &bt->enabled : nullptr, &MenuBinds::bt_bind, &MenuBinds::bt_listening);
+        if (open && bt) {
+            SectionHeader("Mode");
+            {
+                const char* modes[] = { "Lag", "Smooth", "Advanced" };
+                PhantomCombo("Mode", "##bt_mode", BacktrackSettings::mode, modes, 3);
+            }
+            if (BacktrackSettings::mode == 0) {
+                SectionHeader("Timing");
+                PhantomSliderInt("Delay (ticks)", "##bt_ticks", BacktrackSettings::delayInTicks, 1, 15);
+                PhantomSliderInt("Cooldown (ms)", "##bt_cd", BacktrackSettings::cooldown, 100, 1000);
+                PhantomToggleRow("##bt_dc", "Distance check", BacktrackSettings::distanceCheck);
+                if (BacktrackSettings::distanceCheck)
+                    PhantomRangeSliderFloat("##bt_dist", BacktrackSettings::distance, BacktrackSettings::distanceMax,
+                        0.f, 10.f, "%.1f - %.1f");
+            } else if (BacktrackSettings::mode == 1) {
+                SectionHeader("Timing");
+                PhantomSliderInt("Delay (ms)", "##bt_smd", BacktrackSettings::smoothDelayMs, 0, 1000);
+                PhantomSliderInt("Force flush (ms)", "##bt_ff", BacktrackSettings::forceFlushMs, 100, 1001);
+                if (BacktrackSettings::forceFlushMs >= 1001)
+                    ImGui::TextColored(TEXT_DIM, "Never");
+                PhantomToggleRow("##bt_spr", "Only sprinting", BacktrackSettings::onlySprinting);
+            } else {
+                SectionHeader("Timing");
+                PhantomSliderInt("Max delay (ms)", "##bt_maxd", BacktrackSettings::maxDelay, 0, 5000);
+                PhantomSliderInt("Min delay (ms)", "##bt_mind", BacktrackSettings::minDelay, 0, 5000);
+                PhantomSliderInt("Delay between lags (ms)", "##bt_dbl", BacktrackSettings::delayBetweenLags, 0, 4000);
+                PhantomSliderInt("Stop at hurt time", "##bt_sht", BacktrackSettings::stopAtHurt, 0, 10);
+                {
+                    const char* aborts[] = { "None", "OnAttack", "OnRange", "ClickCheck" };
+                    PhantomCombo("Disable on", "##bt_do", BacktrackSettings::disableOn, aborts, 4);
+                }
+                if (BacktrackSettings::disableOn == 2)
+                    PhantomSliderFloat("Stop on attack range", "##bt_soar", BacktrackSettings::stopOnAttackRange, 0.f, 10.f, "%.1f");
+                PhantomToggleRow("##bt_own", "Only when needed", BacktrackSettings::onlyWhenNeeded);
+                PhantomToggleRow("##bt_cht", "Continue at hurt time", BacktrackSettings::continueAtHurtTime);
+            }
+            SectionHeader("ESP");
+            PhantomToggleRow("##bt_box", "Draw box", BacktrackSettings::drawBox);
+            if (BacktrackSettings::drawBox) {
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f);
+                ImGui::ColorEdit4("##bt_fillc", BacktrackSettings::boxColor,
+                    ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
+                    ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf);
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f);
+                ImGui::ColorEdit4("##bt_outc", BacktrackSettings::outlineColor,
+                    ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
+                    ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf);
+            }
+            SectionHeader("Bind");
+            DrawBindButton("bt_bind", MenuBinds::bt_bind, MenuBinds::bt_listening);
+            ImGui::Spacing();
+        }
+    }
+
+    CloseSnapCard();
     ImGui::EndChild();
     ImGui::PopStyleColor();
 }
@@ -1310,6 +1666,111 @@ void ClientMenu::RenderStorageEspTab() {
     ImGui::Spacing();
 }
 
+void ClientMenu::RenderBlockEspTab() {
+    BlockEsp* be = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((be = dynamic_cast<BlockEsp*>(m))) break;
+    if (!be) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Block ESP", be->enabled, MenuBinds::besp_bind, MenuBinds::besp_listening, W,
+        "Scans and highlights selected blocks.");
+    if (!expanded) return;
+
+    SectionHeader("Scan");
+    PhantomSliderInt("Range (chunks)", "##besp_rg", BlockEspSettings::rangeChunks, 1, 8);
+    PhantomSliderInt("Limit per chunk", "##besp_lim", BlockEspSettings::limitPerChunk, 8, 256);
+
+    SectionHeader("Customization");
+    PhantomSliderFloat("Outline thickness", "##besp_ow", BlockEspSettings::outlineWidth, 0.5f, 5.f, "%.1f");
+
+    SectionHeader("Block types");
+    ImGui::TextColored(TEXT_DIM, "Chests: prefer Storage ESP.");
+    for (int i = 0; i < 32; i++) {
+        const int id = BlockEspSettings::ids[i];
+        if (id <= 0) continue;
+        ImGui::PushID(i);
+        ImGui::TextColored(TEXT, "%s", Weapons_NameForId(id));
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 28.f);
+        ImGui::ColorEdit4("##besp_c", BlockEspSettings::colors[i],
+            ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
+            ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf);
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.f, 0.f, 0.f, 0.f });
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, BG3);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, AC_DIM);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        if (ImGui::Button("x##besp_rm", { 20.f, 0.f }))
+            BlockEsp_Remove(id);
+        ImGui::PopStyleColor(4);
+        ImGui::PopID();
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Button, BG2);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, BG3);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, AC_DIM);
+    ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+    if (ImGui::Button("Click to add##besp_add", { ImGui::GetContentRegionAvail().x, 28.f }))
+        ImGui::OpenPopup("Search block");
+    ImGui::PopStyleColor(4);
+
+    {
+        static char search[64] = {};
+        ImGui::SetNextWindowSize({ 460.f, 420.f }, ImGuiCond_Appearing);
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, { 0.07f, 0.07f, 0.07f, 0.98f });
+        ImGui::PushStyleColor(ImGuiCol_Border, { 0.16f, 0.16f, 0.16f, 1.f });
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 12.f, 12.f });
+        if (ImGui::BeginPopupModal("Search block", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
+            ImGui::SetNextItemWidth(-1.f);
+            ImGui::InputTextWithHint("##besp_search", "Search block", search, sizeof(search));
+            ImGui::Dummy({ 0.f, 6.f });
+
+            auto match = [](const char* name, const char* q) {
+                if (!q || !q[0]) return true;
+                const char* n = name;
+                const char* p = q;
+                while (*n) {
+                    const char* a = n;
+                    const char* b = p;
+                    while (*a && *b) {
+                        char ca = (char)std::tolower((unsigned char)*a);
+                        char cb = (char)std::tolower((unsigned char)*b);
+                        if (ca != cb) break;
+                        ++a; ++b;
+                    }
+                    if (!*b) return true;
+                    ++n;
+                }
+                return false;
+            };
+
+            int catN = 0;
+            const WeaponsCatalogEntry* cat = Weapons_Catalog(catN);
+            ImGui::BeginChild("##besp_list", { 0.f, 320.f }, true);
+            for (int i = 0; i < catN; i++) {
+                if (cat[i].id <= 0 || cat[i].id >= 256) continue;
+                if (BlockEsp_Has(cat[i].id)) continue;
+                if (!match(cat[i].name, search)) continue;
+                if (ImGui::Selectable(cat[i].name)) {
+                    BlockEsp_Add(cat[i].id);
+                    search[0] = 0;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndChild();
+            if (ImGui::Button("Close", { -1.f, 0.f }))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+    }
+
+    SectionHeader("Bind");
+    DrawBindButton("besp_bind", MenuBinds::besp_bind, MenuBinds::besp_listening);
+    ImGui::Spacing();
+}
+
 void ClientMenu::RenderNametagTab() {
     Nametag* nt = nullptr;
     for (auto* m : Modules::GetRegisteredModules())
@@ -1503,9 +1964,100 @@ void ClientMenu::RenderFastBreakTab() {
         PhantomSliderFloat("Power", "##fb_pow", FastBreakSettings::power, 0.f, 100.f, "%.0f%%");
     else
         PhantomSliderFloat("Multiplier", "##fb_mul", FastBreakSettings::multiplier, 0.f, 100.f, "%.1fx");
+    ImGui::TextColored(TEXT_DIM, "Ticks restants pour casser : %d", FastBreakSettings::liveRemain);
 
     SectionHeader("Bind");
     DrawBindButton("fb_bind", MenuBinds::fb_bind, MenuBinds::fb_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderAutoToolTab() {
+    if (g_GameLauncher != LAUNCHER_LUNAR) return;
+    AutoTool* at = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((at = dynamic_cast<AutoTool*>(m))) break;
+    if (!at) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("AutoTool", at->enabled, MenuBinds::at_bind, MenuBinds::at_listening, W,
+        "Switches to the best hotbar tool for the block you look at. Lunar 1.7 / 1.8.");
+    if (!expanded) return;
+
+    PhantomToggleRow("##at_mine", "Only while mining", AutoToolSettings::onlyMining);
+    PhantomToggleRow("##at_back", "Switch back", AutoToolSettings::switchBack);
+    PhantomToggleRow("##at_silk", "Prefer silk touch", AutoToolSettings::preferSilk);
+    PhantomSliderInt("Delay (ms)", "##at_delay", AutoToolSettings::delayMs, 0, 250);
+
+    SectionHeader("Bind");
+    DrawBindButton("at_bind", MenuBinds::at_bind, MenuBinds::at_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderChestStealerTab() {
+    if (g_GameLauncher != LAUNCHER_LUNAR) return;
+    ChestStealer* cs = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((cs = dynamic_cast<ChestStealer*>(m))) break;
+    if (!cs) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("ChestStealer", cs->enabled, MenuBinds::cs_bind, MenuBinds::cs_listening, W,
+        "Moves the cursor and shift-clicks chest slots. Lunar 1.7 / 1.8.");
+    if (!expanded) return;
+
+    if (ChestStealerSettings::delayMin > ChestStealerSettings::delayMax)
+        ChestStealerSettings::delayMin = ChestStealerSettings::delayMax;
+    PhantomSliderInt("Delay min (ms)", "##cs_dmin", ChestStealerSettings::delayMin, 0, 400);
+    PhantomSliderInt("Delay max (ms)", "##cs_dmax", ChestStealerSettings::delayMax, 0, 400);
+    if (ChestStealerSettings::delayMax < ChestStealerSettings::delayMin)
+        ChestStealerSettings::delayMax = ChestStealerSettings::delayMin;
+    PhantomSliderInt("First delay (ms)", "##cs_first", ChestStealerSettings::firstDelay, 0, 500);
+    PhantomSliderInt("Close delay (ms)", "##cs_close", ChestStealerSettings::closeDelay, 0, 500);
+    PhantomToggleRow("##cs_ac", "Auto close", ChestStealerSettings::autoClose);
+    PhantomToggleRow("##cs_nc", "Name check", ChestStealerSettings::nameCheck);
+    PhantomToggleRow("##cs_rnd", "Randomize", ChestStealerSettings::randomize);
+    PhantomToggleRow("##cs_int", "Intelligent", ChestStealerSettings::intelligent);
+
+    SectionHeader("Bind");
+    DrawBindButton("cs_bind", MenuBinds::cs_bind, MenuBinds::cs_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderInvManagerTab() {
+    InvManager* im = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((im = dynamic_cast<InvManager*>(m))) break;
+    if (!im) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Inv Manager", im->enabled, MenuBinds::im_bind, MenuBinds::im_listening, W,
+        "Manages armor and hotbar while your inventory is open.");
+    if (!expanded) return;
+
+    PhantomSliderInt("Delay after open (ms)", "##im_dao", InvManagerSettings::delayAfterOpen, 0, 500);
+    PhantomSliderInt("Speed", "##im_spd", InvManagerSettings::speed, 1, 10);
+    PhantomToggleRow("##im_ss", "Smart speed", InvManagerSettings::smartSpeed);
+    PhantomToggleRow("##im_rnd", "Randomize", InvManagerSettings::randomize);
+    PhantomToggleRow("##im_arm", "Equip armor", InvManagerSettings::equipArmor);
+    PhantomToggleRow("##im_hb", "Sort hotbar", InvManagerSettings::sortHotbar);
+    if (InvManagerSettings::sortHotbar) {
+        PhantomToggleRow("##im_fb", "Smart fallbacks", InvManagerSettings::smartFallbacks);
+        SectionHeader("Hotbar");
+        static const char* items[] = {
+            "None","Sword","Axe","Bow","Blocks","Gapple","Pearl","Rod",
+            "Projectiles","Water","Lava","Soup","Potion","Pickaxe","Food","Flint","Web"
+        };
+        for (int i = 0; i < 9; i++) {
+            char lab[16];
+            snprintf(lab, sizeof(lab), "Slot %d", i + 1);
+            char id[24];
+            snprintf(id, sizeof(id), "##im_hb%d", i);
+            PhantomCombo(lab, id, InvManagerSettings::hotbar[i], items, 17);
+        }
+    }
+
+    SectionHeader("Bind");
+    DrawBindButton("im_bind", MenuBinds::im_bind, MenuBinds::im_listening);
     ImGui::Spacing();
 }
 
@@ -1616,6 +2168,60 @@ void ClientMenu::RenderNoJumpDelayTab() {
     ImGui::Spacing();
 }
 
+void ClientMenu::RenderKeepSprintTab() {
+    KeepSprint* ks = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((ks = dynamic_cast<KeepSprint*>(m))) break;
+    if (!ks) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("KeepSprint", ks->enabled, MenuBinds::ks_bind, MenuBinds::ks_listening, W,
+        "Keeps sprint after hitting to deal more knockback.");
+    if (!expanded) return;
+
+    SectionHeader("Mode");
+    {
+        const char* modes[] = { "Dynamic", "Static" };
+        PhantomCombo("Mode", "##ks_mode", KeepSprintSettings::mode, modes, 2);
+    }
+    SectionHeader("Speed");
+    PhantomSliderFloat("Speed", "##ks_spd", KeepSprintSettings::speed, 0.6f, 1.f, "%.2f");
+    SectionHeader("Conditions");
+    PhantomSliderInt("Chance (%)", "##ks_ch", KeepSprintSettings::chance, 0, 100);
+    PhantomToggleRow("##ks_wpn", "Weapons only", KeepSprintSettings::weaponsOnly);
+    PhantomToggleRow("##ks_beh", "Only on behind", KeepSprintSettings::onlyOnBehind);
+    SectionHeader("Bind");
+    DrawBindButton("ks_bind", MenuBinds::ks_bind, MenuBinds::ks_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderStrafeTab() {
+    Strafe* sf = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((sf = dynamic_cast<Strafe*>(m))) break;
+    if (!sf) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Strafe", sf->enabled, MenuBinds::strf_bind, MenuBinds::strf_listening, W,
+        "Strafe faster in different directions than vanilla.");
+    if (!expanded) return;
+
+    SectionHeader("Strength");
+    PhantomSliderInt("On ground (%)", "##sf_g", StrafeSettings::onGround, 0, 100);
+    PhantomSliderInt("In air (%)", "##sf_a", StrafeSettings::inAir, 0, 100);
+    PhantomSliderInt("On jump (%)", "##sf_j", StrafeSettings::onJump, 0, 100);
+    ImGui::TextColored(TEXT_DIM, "0% = vanilla, 100% = max. Air flag souvent.");
+
+    SectionHeader("Conditions");
+    PhantomSliderInt("Maximum hurt time", "##sf_ht", StrafeSettings::maxHurtTime, 0, 10);
+    PhantomToggleRow("##sf_wpn", "Holding weapon", StrafeSettings::holdingWeapon);
+    ImGui::TextColored(TEXT_DIM, "Baisse hurt time pour ne pas toucher au knockback.");
+
+    SectionHeader("Bind");
+    DrawBindButton("strf_bind", MenuBinds::strf_bind, MenuBinds::strf_listening);
+    ImGui::Spacing();
+}
+
 // ------------------------------------------------------------------
 //  QUICKACCEL TAB  (Utility)
 // ------------------------------------------------------------------
@@ -1658,6 +2264,51 @@ void ClientMenu::RenderSnapTapTab() {
 
     SectionHeader("Bind");
     DrawBindButton("st_bind", MenuBinds::st_bind, MenuBinds::st_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderSprintTab() {
+    Sprint* sp = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((sp = dynamic_cast<Sprint*>(m))) break;
+    if (!sp) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Sprint", sp->enabled, MenuBinds::sp_bind, MenuBinds::sp_listening, W,
+        "Automatically sprints without holding the sprint bind.");
+    if (!expanded) return;
+
+    SectionHeader("Allow while");
+    PhantomToggleRow("##sp_use", "Using item", SprintSettings::usingItem);
+    PhantomToggleRow("##sp_back", "Backwards", SprintSettings::backwards);
+    PhantomToggleRow("##sp_side", "Sideways", SprintSettings::sideways);
+    PhantomToggleRow("##sp_inv", "In inventory", SprintSettings::inInventory);
+    ImGui::TextColored(TEXT_DIM, "Sans option = sprint legit (W seulement).");
+
+    SectionHeader("Bind");
+    DrawBindButton("sp_bind", MenuBinds::sp_bind, MenuBinds::sp_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderNoSlowTab() {
+    NoSlow* ns = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((ns = dynamic_cast<NoSlow*>(m))) break;
+    if (!ns) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("NoSlow", ns->enabled, MenuBinds::ns_bind, MenuBinds::ns_listening, W,
+        "Removes or reduces slowdown while using items.");
+    if (!expanded) return;
+
+    SectionHeader("Retained speed");
+    PhantomSliderInt("Swords (%)", "##ns_sw", NoSlowSettings::swords, 20, 100);
+    PhantomSliderInt("Bows (%)", "##ns_bw", NoSlowSettings::bows, 20, 100);
+    PhantomSliderInt("Consumables (%)", "##ns_cs", NoSlowSettings::consumables, 20, 100);
+    ImGui::TextColored(TEXT_DIM, "20% = vanilla, 100% = full speed. Teste Swords a 100 puis 20 en bloquant (clic droit + Z/W).");
+
+    SectionHeader("Bind");
+    DrawBindButton("ns_bind", MenuBinds::ns_bind, MenuBinds::ns_listening);
     ImGui::Spacing();
 }
 
@@ -1704,6 +2355,112 @@ void ClientMenu::RenderArmorTab() {
             ImGui::Spacing();
         }
     }
+}
+
+// ------------------------------------------------------------------
+//  WEAPONS TAB  (Utility — shared holding-weapon rules)
+// ------------------------------------------------------------------
+void ClientMenu::RenderWeaponsTab() {
+    bool open = SnapCard("Weapons", "Configure which items count as weapons for other modules.",
+        nullptr, nullptr, nullptr);
+    if (!open) return;
+
+    SectionHeader("Item types");
+    PhantomToggleRow("##wp_fist", "Fist", WeaponsSettings::fist);
+    PhantomToggleRow("##wp_sw", "Swords", WeaponsSettings::swords);
+    PhantomToggleRow("##wp_ax", "Axes", WeaponsSettings::axes);
+
+    SectionHeader("Extra");
+    for (int i = 0; i < 32; i++) {
+        const int id = WeaponsSettings::extraIds[i];
+        if (id <= 0) continue;
+        ImGui::PushID(i);
+        ImGui::TextColored(TEXT, "%s", Weapons_NameForId(id));
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 8.f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{ 0.f, 0.f, 0.f, 0.f });
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, BG3);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, AC_DIM);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        if (ImGui::Button("x##wp_rm", { 20.f, 0.f }))
+            Weapons_RemoveExtra(id);
+        ImGui::PopStyleColor(4);
+        ImGui::PopID();
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Button, BG2);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, BG3);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, AC_DIM);
+    ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+    if (ImGui::Button("Click to add##wp_add", { ImGui::GetContentRegionAvail().x, 28.f }))
+        ImGui::OpenPopup("Search item");
+    ImGui::PopStyleColor(4);
+
+    {
+        static char search[64] = {};
+        ImGui::SetNextWindowSize({ 460.f, 420.f }, ImGuiCond_Appearing);
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, { 0.07f, 0.07f, 0.07f, 0.98f });
+        ImGui::PushStyleColor(ImGuiCol_Border, { 0.16f, 0.16f, 0.16f, 1.f });
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 12.f, 12.f });
+        if (ImGui::BeginPopupModal("Search item", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
+            ImGui::SetNextItemWidth(-1.f);
+            ImGui::InputTextWithHint("##wp_search", "Search item", search, sizeof(search));
+            ImGui::Dummy({ 0.f, 6.f });
+
+            auto match = [](const char* name, const char* q) {
+                if (!q || !q[0]) return true;
+                const char* n = name;
+                const char* p = q;
+                while (*n) {
+                    const char* a = n;
+                    const char* b = p;
+                    while (*a && *b) {
+                        char ca = (char)std::tolower((unsigned char)*a);
+                        char cb = (char)std::tolower((unsigned char)*b);
+                        if (ca != cb) break;
+                        ++a; ++b;
+                    }
+                    if (!*b) return true;
+                    ++n;
+                }
+                return false;
+            };
+
+            int count = 0;
+            const WeaponsCatalogEntry* cat = Weapons_Catalog(count);
+            ImGui::BeginChild("##wp_list", { 0.f, ImGui::GetContentRegionAvail().y }, false);
+            ImGui::Columns(2, "##wp_cols", false);
+            for (int i = 0; i < count; i++) {
+                if (Weapons_HasExtra(cat[i].id)) continue;
+                if (!match(cat[i].name, search)) continue;
+                if (ImGui::Selectable(cat[i].name, false, 0, { 0.f, 22.f })) {
+                    Weapons_AddExtra(cat[i].id);
+                    search[0] = 0;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::NextColumn();
+            }
+            ImGui::Columns(1);
+            ImGui::EndChild();
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+    }
+
+    SectionHeader("Any item with");
+    PhantomToggleRow("##wp_sh", "Sharpness", WeaponsSettings::sharpness);
+    PhantomToggleRow("##wp_kb", "Knockback", WeaponsSettings::knockback);
+    PhantomToggleRow("##wp_fa", "Fire aspect", WeaponsSettings::fireAspect);
+
+    SectionHeader("Any item in");
+    PhantomToggleRow("##wp_hb0", "Slot 1", WeaponsSettings::hotbar[0]);
+    for (int i = 1; i < 9; i++) {
+        char lab[24], tid[24];
+        snprintf(lab, sizeof(lab), "Slot %d", i + 1);
+        snprintf(tid, sizeof(tid), "##wp_hb%d", i);
+        PhantomToggleRow(tid, lab, WeaponsSettings::hotbar[i]);
+    }
+    ImGui::Spacing();
 }
 
 // ------------------------------------------------------------------
@@ -1869,7 +2626,238 @@ void ClientMenu::RenderEnemiesTab() {
         }
     }
 }
-// ------------------------------------------------------------------
+
+void ClientMenu::RenderNoItemReleaseTab() {
+    NoItemRelease* nir = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((nir = dynamic_cast<NoItemRelease*>(m))) break;
+    if (!nir) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("No Item Release", nir->enabled, MenuBinds::nir_bind, MenuBinds::nir_listening, W,
+        "Cancels the item release packet after using an item.");
+    if (!expanded) return;
+
+    SectionHeader("Mode");
+    {
+        const char* modes[] = { "Consumable", "Sword", "All" };
+        PhantomCombo("Mode", "##nir_mode", NoItemReleaseSettings::mode, modes, 3);
+    }
+    ImGui::TextColored(TEXT_DIM, "Un clic droit : tu relaches, ca mange quand meme.");
+    ImGui::TextColored(TEXT_DIM, "All ignore arcs et cannes.");
+
+    SectionHeader("Bind");
+    DrawBindButton("nir_bind", MenuBinds::nir_bind, MenuBinds::nir_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderBlinkTab() {
+    Blink* bl = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((bl = dynamic_cast<Blink*>(m))) break;
+    bool open = SnapCard("Blink", "Holds your packets so you teleport when they are released.",
+        bl ? &bl->enabled : nullptr, &MenuBinds::blink_bind, &MenuBinds::blink_listening);
+    if (open && bl) {
+        SectionHeader("Mode");
+        {
+            const char* dirs[] = { "OutBound", "InBound", "Both" };
+            PhantomCombo("Direction", "##bl_dir", BlinkSettings::direction, dirs, 3);
+        }
+        SectionHeader("Timing");
+        PhantomSliderInt("Auto send delay (ms)", "##bl_asd", BlinkSettings::autoSendDelay, 0, 20000);
+        SectionHeader("Safety");
+        PhantomToggleRow("##bl_loc", "Disable on local damage", BlinkSettings::disableOnLocalDamage);
+        PhantomToggleRow("##bl_tgt", "Disable on target damage", BlinkSettings::disableOnTargetDamage);
+        SectionHeader("ESP");
+        PhantomToggleRow("##bl_esp", "Draw ESP", BlinkSettings::drawEsp);
+        if (BlinkSettings::drawEsp) {
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f);
+            ImGui::ColorEdit4("##bl_col", BlinkSettings::espColor,
+                ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
+                ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf);
+        }
+        SectionHeader("Bind");
+        DrawBindButton("blink_bind", MenuBinds::blink_bind, MenuBinds::blink_listening);
+        ImGui::Spacing();
+    }
+}
+
+void ClientMenu::RenderAntiDebuffTab() {
+    AntiDebuff* ad = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((ad = dynamic_cast<AntiDebuff*>(m))) break;
+    if (!ad) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Anti Debuff", ad->enabled, MenuBinds::ad_bind, MenuBinds::ad_listening, W,
+        "Hides negative visual effects.");
+    if (!expanded) return;
+
+    PhantomToggleRow("##ad_blind", "Blindness", AntiDebuffSettings::blindness);
+    ImGui::TextColored(TEXT_DIM, "Removes the darkness when the blindness effect is active.");
+    PhantomToggleRow("##ad_nausea", "Nausea", AntiDebuffSettings::nausea);
+    ImGui::TextColored(TEXT_DIM, "Removes the screen warping when the Nausea effect is active.");
+
+    SectionHeader("Bind");
+    DrawBindButton("ad_bind", MenuBinds::ad_bind, MenuBinds::ad_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderPingFixTab() {
+    PingFix* pf = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((pf = dynamic_cast<PingFix*>(m))) break;
+    if (!pf) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Ping Fix", pf->enabled, MenuBinds::pf_bind, MenuBinds::pf_listening, W,
+        "Hides lag from Backtrack, LagRange and Blink on /ping.");
+    if (!expanded) return;
+
+    ImGui::TextColored(TEXT_DIM, "Cosmetic only. Lets Keep Alive packets through while lagging.");
+    ImGui::TextColored(TEXT_DIM, "Has no effect if those modules are not lagging packets.");
+
+    SectionHeader("Bind");
+    DrawBindButton("pf_bind", MenuBinds::pf_bind, MenuBinds::pf_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderRightClickerTab() {
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Right Clicker", RightClicker::enabled, MenuBinds::rc_bind, MenuBinds::rc_listening, W,
+        "Clicks for you when holding right-click.");
+    if (!expanded) return;
+
+    SectionHeader("CPS");
+    PhantomSliderInt("Clics par seconde", "##rc_cps", RightClicker::cps, 5, 25);
+    ImGui::TextColored(TEXT_DIM, "~%.1f ms entre clics", 1000.f / (float)RightClicker::cps);
+    ImGui::Spacing();
+
+    SectionHeader("Options");
+    PhantomToggleRow("##rc_bla", "Blatant", RightClicker::blatant);
+    PhantomToggleRow("##rc_exh", "Exhaust", RightClicker::exhaust);
+
+    SectionHeader("Bind");
+    DrawBindButton("rc_bind", MenuBinds::rc_bind, MenuBinds::rc_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderBowBoostTab() {
+    BowBoost* bb = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((bb = dynamic_cast<BowBoost*>(m))) break;
+    if (!bb) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("BowBoost", bb->enabled, MenuBinds::bboost_bind, MenuBinds::bboost_listening, W,
+        "Bind fires a bow shot like a macro: switch, shoot, switch back.");
+    if (!expanded) return;
+
+    ImGui::TextColored(TEXT_DIM, "Active le module, mets un bind, appuie : ca tire devant toi.");
+
+    SectionHeader("Timing");
+    PhantomSliderInt("Charge ticks", "##bb_chg", BowBoostSettings::chargeTicks, 1, 20);
+    PhantomSliderInt("Delay (ms)", "##bb_dly", BowBoostSettings::delayMs, 0, 400);
+
+    SectionHeader("Options");
+    PhantomToggleRow("##bb_sw", "Switch item", BowBoostSettings::switchItem);
+    PhantomToggleRow("##bb_lu", "Look up", BowBoostSettings::lookUp);
+    if (BowBoostSettings::lookUp)
+        PhantomSliderFloat("Pitch", "##bb_pitch", BowBoostSettings::pitch, 40.f, 89.f, "%.0f");
+
+    SectionHeader("Bind");
+    DrawBindButton("bboost_bind", MenuBinds::bboost_bind, MenuBinds::bboost_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderBridgeAssistTab() {
+    if (g_GameLauncher != LAUNCHER_LUNAR) return;
+    BridgeAssist* ba = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((ba = dynamic_cast<BridgeAssist*>(m))) break;
+    if (!ba) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("BridgeAssist", ba->enabled, MenuBinds::ba_bind, MenuBinds::ba_listening, W,
+        "Auto-sneaks at block edges while bridging. Lunar 1.7 / 1.8.");
+    if (!expanded) return;
+
+    PhantomSliderFloat("Edge offset", "##ba_edge", BridgeAssistSettings::edgeOffset, 0.f, 0.30f, "%.2f");
+    PhantomSliderInt("Unsneak delay (ms)", "##ba_usd", BridgeAssistSettings::unsneakDelay, 0, 250);
+    PhantomToggleRow("##ba_look", "Looking down", BridgeAssistSettings::lookingDown);
+    if (BridgeAssistSettings::lookingDown)
+        PhantomSliderFloat("Pitch", "##ba_pitch", BridgeAssistSettings::pitch, 0.f, 90.f, "%.0f");
+    PhantomToggleRow("##ba_blocks", "Only while holding blocks", BridgeAssistSettings::onlyBlocks);
+    PhantomToggleRow("##ba_jump", "Sneak on jump", BridgeAssistSettings::sneakOnJump);
+
+    SectionHeader("Bind");
+    DrawBindButton("ba_bind", MenuBinds::ba_bind, MenuBinds::ba_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderBlockInTab() {
+    if (g_GameLauncher != LAUNCHER_LUNAR) return;
+    BlockIn* bi = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((bi = dynamic_cast<BlockIn*>(m))) break;
+    if (!bi) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Block In", bi->enabled, MenuBinds::bi_bind, MenuBinds::bi_listening, W,
+        "Places blocks around you. Useful for Bed Wars. Lunar 1.7 / 1.8.");
+    if (!expanded) return;
+
+    PhantomSliderFloat("Speed", "##bi_spd", BlockInSettings::speed, 1.f, 10.f, "%.0f");
+    PhantomToggleRow("##bi_ground", "Only on ground", BlockInSettings::onlyOnGround);
+
+    SectionHeader("Bind");
+    DrawBindButton("bi_bind", MenuBinds::bi_bind, MenuBinds::bi_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderClutchTab() {
+    if (g_GameLauncher != LAUNCHER_LUNAR) return;
+    Clutch* cl = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((cl = dynamic_cast<Clutch*>(m))) break;
+    if (!cl) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Clutch", cl->enabled, MenuBinds::clutch_bind, MenuBinds::clutch_listening, W,
+        "Places blocks under you when you are about to fall. Lunar 1.7 / 1.8.");
+    if (!expanded) return;
+
+    PhantomSliderInt("Range", "##cl_range", ClutchSettings::range, 1, 6);
+    PhantomSliderFloat("FOV", "##cl_fov", ClutchSettings::fov, 20.f, 180.f, "%.0f");
+    PhantomSliderInt("Minimum height", "##cl_h", ClutchSettings::minHeight, 1, 10);
+    PhantomSliderFloat("Click speed", "##cl_cps", ClutchSettings::clickSpeed, 1.f, 20.f, "%.0f");
+    PhantomSliderFloat("Randomization", "##cl_rnd", ClutchSettings::randomization, 0.f, 100.f, "%.0f");
+    static const char* sel[] = { "No", "On depletion", "Always" };
+    PhantomCombo("Select blocks", "##cl_sel", ClutchSettings::selectBlocks, sel, 3);
+    PhantomToggleRow("##cl_side", "Only place sideways", ClutchSettings::onlySideways);
+
+    SectionHeader("Aim");
+    PhantomSliderFloat("Base speed", "##cl_base", ClutchSettings::baseSpeed, 1.f, 20.f, "%.0f");
+    PhantomSliderFloat("Acceleration", "##cl_acc", ClutchSettings::acceleration, 0.f, 20.f, "%.0f");
+    PhantomSliderFloat("Acceleration strength", "##cl_acs", ClutchSettings::accelStrength, 0.f, 100.f, "%.0f%%");
+    PhantomToggleRow("##cl_mp", "Multipoint", ClutchSettings::multipoint);
+
+    SectionHeader("Snap-back");
+    PhantomSliderInt("Delay (ms)", "##cl_sd", ClutchSettings::snapDelay, 0, 400);
+    PhantomSliderInt("Duration (ms)", "##cl_sdu", ClutchSettings::snapDuration, 1, 400);
+    PhantomToggleRow("##cl_jump", "Keep jump direction", ClutchSettings::keepJumpDir);
+    PhantomToggleRow("##cl_dis", "Disable afterwards", ClutchSettings::disableAfter);
+
+    SectionHeader("Conditions");
+    PhantomToggleRow("##cl_air", "Mid-air only", ClutchSettings::midAir);
+    PhantomToggleRow("##cl_hurt", "Recently took damage", ClutchSettings::onHurt);
+    PhantomToggleRow("##cl_back", "Moving backwards", ClutchSettings::backwards);
+
+    SectionHeader("Bind");
+    DrawBindButton("clutch_bind", MenuBinds::clutch_bind, MenuBinds::clutch_listening);
+    ImGui::Spacing();
+}
+
 void ClientMenu::RenderNotificationsTab() {
     bool notifExpanded = SnapCard("Notifications", "Shows enable/disable toasts.",
         &NotificationSettings::enabled, &MenuBinds::notif_bind, &MenuBinds::notif_listening);
@@ -1889,6 +2877,7 @@ void ClientMenu::RenderNotificationsTab() {
         PhantomToggleRow("##notif_cat_combat", "Combat", NotificationSettings::catCombat);
         PhantomToggleRow("##notif_cat_visual", "Visual", NotificationSettings::catVisual);
         PhantomToggleRow("##notif_cat_utility", "Utility", NotificationSettings::catUtility);
+        PhantomToggleRow("##notif_cat_blocks", "Blocks", NotificationSettings::catBlocks);
     }
 
     // ── Apparence ──────────────────────────────────────────────────
@@ -1921,6 +2910,127 @@ void ClientMenu::RenderNotificationsTab() {
             NotificationSettings::Push("TestModule", "Visual", false);
         ImGui::PopStyleColor(3);
         ImGui::Spacing();
+    }
+}
+
+void ClientMenu::RenderPointersTab() {
+    Pointers* ptr = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((ptr = dynamic_cast<Pointers*>(m))) break;
+    if (!ptr) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Pointers", ptr->enabled, MenuBinds::ptr_bind, MenuBinds::ptr_listening, W,
+        "Arrows around your crosshair pointing to other players.");
+    if (!expanded) return;
+
+    PhantomSliderFloat("Range", "##ptr_rg", PointersSettings::range, 8.f, 128.f, "%.0f");
+    PhantomSliderFloat("Ignore within FOV", "##ptr_fov", PointersSettings::ignoreFov, 0.f, 180.f, "%.0f deg");
+    ImGui::TextColored(TEXT_DIM, "0 = always show. Higher hides players already on screen.");
+    PhantomToggleRow("##ptr_hf", "Hide friendlies", PointersSettings::hideFriendlies);
+
+    SectionHeader("Customization");
+    static const char* styles[] = { "2D", "3D" };
+    PhantomCombo("Style", "##ptr_st", PointersSettings::style, styles, 2);
+    static const char* colors[] = { "Distance", "Name Tag", "Manual" };
+    PhantomCombo("Colors", "##ptr_cm", PointersSettings::colorMode, colors, 3);
+
+    auto colorRow = [](const char* label, const char* id, float* col) {
+        ImGui::TextColored(TEXT_DIM, label);
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f);
+        ImGui::ColorEdit4(id, col,
+            ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
+            ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreviewHalf);
+    };
+    if (PointersSettings::colorMode == 0) {
+        colorRow("Near", "##ptr_nc", PointersSettings::nearColor);
+        colorRow("Far", "##ptr_fc", PointersSettings::farColor);
+    } else if (PointersSettings::colorMode == 2) {
+        colorRow("Enemy", "##ptr_ec", PointersSettings::enemyColor);
+        colorRow("Friendly", "##ptr_frc", PointersSettings::friendColor);
+    }
+
+    PhantomSliderFloat("Transition near (blocks)", "##ptr_tn", PointersSettings::nearDist, 1.f, 80.f, "%.0f");
+    PhantomSliderFloat("Transition far (blocks)", "##ptr_tf", PointersSettings::farDist, 1.f, 128.f, "%.0f");
+    PhantomSliderFloat("Scale", "##ptr_sc", PointersSettings::scale, 0.4f, 2.5f, "%.2f");
+    PhantomSliderFloat("Radius", "##ptr_rd", PointersSettings::radius, 20.f, 200.f, "%.0f");
+    PhantomToggleRow("##ptr_dr", "Distance-based radius", PointersSettings::distanceRadius);
+
+    SectionHeader("Bind");
+    DrawBindButton("ptr_bind", MenuBinds::ptr_bind, MenuBinds::ptr_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderIndicatorsTab() {
+    Indicators* ind = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((ind = dynamic_cast<Indicators*>(m))) break;
+    if (!ind) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("Indicators", ind->enabled, MenuBinds::ind_bind, MenuBinds::ind_listening, W,
+        "Warns when fireballs, pearls or arrows spawn.");
+    if (!expanded) return;
+
+    SectionHeader("Warn for");
+    PhantomToggleRow("##ind_fb", "Fireballs", IndicatorsSettings::fireballs);
+    PhantomToggleRow("##ind_pl", "Ender pearls", IndicatorsSettings::pearls);
+    PhantomToggleRow("##ind_ar", "Arrows", IndicatorsSettings::arrows);
+
+    SectionHeader("Conditions");
+    PhantomToggleRow("##ind_cc", "Coming closer", IndicatorsSettings::comingCloser);
+
+    SectionHeader("Bind");
+    DrawBindButton("ind_bind", MenuBinds::ind_bind, MenuBinds::ind_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderNoHurtCamTab() {
+    NoHurtCam* nhc = nullptr;
+    for (auto* m : Modules::GetRegisteredModules())
+        if ((nhc = dynamic_cast<NoHurtCam*>(m))) break;
+    if (!nhc) { ImGui::TextDisabled("Module introuvable."); return; }
+
+    float W = ImGui::GetContentRegionAvail().x;
+    bool expanded = ModuleHeader("No Hurt Cam", nhc->enabled, MenuBinds::nhc_bind, MenuBinds::nhc_listening, W,
+        "Removes the camera shake when you take damage.");
+    if (!expanded) return;
+
+    SectionHeader("Bind");
+    DrawBindButton("nhc_bind", MenuBinds::nhc_bind, MenuBinds::nhc_listening);
+    ImGui::Spacing();
+}
+
+void ClientMenu::RenderGuiModule() {
+    bool open = SnapCard("GUI", "Configures the cheat menu. Saved separately from profiles.",
+        nullptr, &MenuBinds::open_bind, &MenuBinds::open_listening);
+    if (!open) return;
+
+    PhantomSliderFloat("Scale", "##gui_scale", GuiSettings::scale, 0.6f, 1.8f, "%.2f");
+    ImGui::TextColored(TEXT, "Accent color");
+    if (ImGui::ColorEdit4("##gui_accent", GuiSettings::accent,
+        ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_PickerHueWheel))
+        GuiSettings::Save();
+    ImGui::Spacing();
+    bool a = GuiSettings::allowInput, c = GuiSettings::compact, w = GuiSettings::wide;
+    PhantomToggleRow("##gui_input", "Allow input while open", GuiSettings::allowInput);
+    SectionHeader("Layout");
+    PhantomToggleRow("##gui_compact", "Compact", GuiSettings::compact);
+    ImGui::TextColored(TEXT_DIM, "Hides module descriptions.");
+    PhantomToggleRow("##gui_wide", "Wide", GuiSettings::wide);
+    ImGui::TextColored(TEXT_DIM, "Uses more horizontal space.");
+    ImGui::Spacing();
+    ImGui::TextColored(TEXT_DIM, "Menu bind");
+    int prevBind = MenuBinds::open_bind;
+    DrawBindButton("open_bind", MenuBinds::open_bind, MenuBinds::open_listening);
+    ImGui::Spacing();
+    if (a != GuiSettings::allowInput || c != GuiSettings::compact || w != GuiSettings::wide
+        || prevBind != MenuBinds::open_bind)
+        GuiSettings::Save();
+    static float lastScale = GuiSettings::scale;
+    if (fabsf(lastScale - GuiSettings::scale) > 0.0005f) {
+        lastScale = GuiSettings::scale;
+        GuiSettings::Save();
     }
 }
 
@@ -2005,6 +3115,23 @@ void ClientMenu::RenderSettingsTab() {
         };
 
         ImGui::PushID(cfg.id.c_str());
+        ImGui::SetCursorScreenPos({ p.x + W - 40.f, p.y + 42.f });
+        static std::unordered_map<std::string, ULONGLONG> folderHold;
+        if (ImGui::InvisibleButton("##folder", { 22.f, 18.f })) {}
+        if (ImGui::IsItemActive()) {
+            auto& t0 = folderHold[cfg.id];
+            if (!t0) t0 = GetTickCount64();
+            else if (t0 > 1 && GetTickCount64() - t0 > 500) {
+                ShellExecuteA(nullptr, "open", ConfigManager::Directory().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                t0 = 1;
+            }
+        } else folderHold[cfg.id] = 0;
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::SetTooltip("Hold to open folder");
+        }
+        dl->AddText({ p.x + W - 38.f, p.y + 42.f }, IM_COL32(160, 160, 160, 255), "[]");
+
         if (btn("##cfg_del", "Delete", IM_COL32(90, 40, 40, 255)))
             ConfigManager::Delete(cfg.id);
         if (btn("##cfg_upd", "Update", IM_COL32(55, 55, 55, 255)))
@@ -2055,23 +3182,33 @@ void ClientMenu::RenderUnloadTab() {
 // ====================================================================
 void ClientMenu::OnImGuiRender(JNIEnv* env) {
     ApplyTheme();
+    ImGui::GetIO().FontGlobalScale = std::clamp(GuiSettings::scale, 0.6f, 1.8f);
 
     bool bindGracePassed = (GetTickCount64() - g_bindReleasedAt) > 500;
 
     if (!AnyListening() && bindGracePassed) {
+        auto applyBind = [](int& key, bool& prev, bool* en, const char* name, const char* cat) {
+            if (!key || !en) { prev = false; return; }
+            bool n = (GetAsyncKeyState(key) & 0x8000) != 0;
+            if (MenuBinds::Hold(key)) {
+                if (*en != n) {
+                    *en = n;
+                    if (!NotificationSettings::hideIfHoldBind)
+                        NotificationSettings::Push(name, cat, n);
+                }
+            } else if (n && !prev) {
+                *en = !*en;
+                NotificationSettings::Push(name, cat, *en);
+            }
+            prev = n;
+        };
         // Aim Assist bind
         if (MenuBinds::aa_bind) {
             static bool p = false;
-            bool n = (GetAsyncKeyState(MenuBinds::aa_bind) & 0x8000) != 0;
-            if (n && !p) for (auto* m : Modules::GetRegisteredModules()) {
+            for (auto* m : Modules::GetRegisteredModules()) {
                 auto* aa = dynamic_cast<AimAssist*>(m);
-                if (aa) {
-                    aa->enabled = !aa->enabled;
-                    NotificationSettings::Push("Aim Assist", "Combat", aa->enabled);
-                    break;
-                }
+                if (aa) { applyBind(MenuBinds::aa_bind, p, &aa->enabled, "Aim Assist", "Combat"); break; }
             }
-            p = n;
         }
         // Clicker bind
         if (MenuBinds::lc_bind) {
@@ -2097,20 +3234,6 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
             }
             p = n;
         }
-        // Piercing bind
-        if (MenuBinds::prc_bind) {
-            static bool p = false;
-            bool n = (GetAsyncKeyState(MenuBinds::prc_bind) & 0x8000) != 0;
-            if (n && !p) for (auto* m : Modules::GetRegisteredModules()) {
-                auto* pr = dynamic_cast<Piercing*>(m);
-                if (pr) {
-                    pr->enabled = !pr->enabled;
-                    NotificationSettings::Push("Piercing", "Combat", pr->enabled);
-                    break;
-                }
-            }
-            p = n;
-        }
         // KeepSprint bind
         if (MenuBinds::ks_bind) {
             static bool p = false;
@@ -2119,7 +3242,7 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
                 auto* ks = dynamic_cast<KeepSprint*>(m);
                 if (ks) {
                     ks->enabled = !ks->enabled;
-                    NotificationSettings::Push("KeepSprint", "Combat", ks->enabled);
+                    NotificationSettings::Push("KeepSprint", "Move", ks->enabled);
                     break;
                 }
             }
@@ -2138,6 +3261,35 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
                 }
             }
             p = n;
+        }
+        // Sprint Reset bind
+        if (MenuBinds::sr_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* sr = dynamic_cast<SprintReset*>(m);
+                if (sr) { applyBind(MenuBinds::sr_bind, p, &sr->enabled, "Sprint Reset", "Combat"); break; }
+            }
+        }
+        if (MenuBinds::lr_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* lr = dynamic_cast<LagRange*>(m);
+                if (lr) { applyBind(MenuBinds::lr_bind, p, &lr->enabled, "LagRange", "Combat"); break; }
+            }
+        }
+        if (MenuBinds::reach_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* rc = dynamic_cast<Reach*>(m);
+                if (rc) { applyBind(MenuBinds::reach_bind, p, &rc->enabled, "Reach", "Combat"); break; }
+            }
+        }
+        if (MenuBinds::blink_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* bl = dynamic_cast<Blink*>(m);
+                if (bl) { applyBind(MenuBinds::blink_bind, p, &bl->enabled, "Blink", "Utility"); break; }
+            }
         }
         // AutoRod bind
         if (MenuBinds::rod_bind) {
@@ -2166,6 +3318,30 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
                 }
             }
             p = n;
+        }
+        // Auto Block bind
+        if (MenuBinds::ablock_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* abl = dynamic_cast<AutoBlock*>(m);
+                if (abl) { applyBind(MenuBinds::ablock_bind, p, &abl->enabled, "Auto Block", "Combat"); break; }
+            }
+        }
+        // Backtrack bind
+        if (MenuBinds::bt_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* bt = dynamic_cast<Backtrack*>(m);
+                if (bt) { applyBind(MenuBinds::bt_bind, p, &bt->enabled, "Backtrack", "Combat"); break; }
+            }
+        }
+        // Auto Weapon bind
+        if (MenuBinds::aw_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* aw = dynamic_cast<AutoWeapon*>(m);
+                if (aw) { applyBind(MenuBinds::aw_bind, p, &aw->enabled, "Auto Weapon", "Combat"); break; }
+            }
         }
         // ArrayList bind
         if (MenuBinds::al_bind) {
@@ -2246,6 +3422,20 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
                 if (se) {
                     se->enabled = !se->enabled;
                     NotificationSettings::Push("Storage ESP", "Visual", se->enabled);
+                    break;
+                }
+            }
+            p = n;
+        }
+        // Block ESP bind
+        if (MenuBinds::besp_bind) {
+            static bool p = false;
+            bool n = (GetAsyncKeyState(MenuBinds::besp_bind) & 0x8000) != 0;
+            if (n && !p) for (auto* m : Modules::GetRegisteredModules()) {
+                auto* be = dynamic_cast<BlockEsp*>(m);
+                if (be) {
+                    be->enabled = !be->enabled;
+                    NotificationSettings::Push("Block ESP", "Visual", be->enabled);
                     break;
                 }
             }
@@ -2335,11 +3525,59 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
                 auto* fb = dynamic_cast<FastBreak*>(m);
                 if (fb) {
                     fb->enabled = !fb->enabled;
-                    NotificationSettings::Push("FastBreak", "Utility", fb->enabled);
+                    NotificationSettings::Push("FastBreak", "Blocks", fb->enabled);
                     break;
                 }
             }
             p = n;
+        }
+        // AutoTool bind
+        if (MenuBinds::at_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* at = dynamic_cast<AutoTool*>(m);
+                if (at) { applyBind(MenuBinds::at_bind, p, &at->enabled, "AutoTool", "Blocks"); break; }
+            }
+        }
+        // ChestStealer bind
+        if (MenuBinds::cs_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* cs = dynamic_cast<ChestStealer*>(m);
+                if (cs) { applyBind(MenuBinds::cs_bind, p, &cs->enabled, "ChestStealer", "Utility"); break; }
+            }
+        }
+        // Inv Manager bind
+        if (MenuBinds::im_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* im = dynamic_cast<InvManager*>(m);
+                if (im) { applyBind(MenuBinds::im_bind, p, &im->enabled, "Inv Manager", "Utility"); break; }
+            }
+        }
+        // BridgeAssist bind
+        if (MenuBinds::ba_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* ba = dynamic_cast<BridgeAssist*>(m);
+                if (ba) { applyBind(MenuBinds::ba_bind, p, &ba->enabled, "BridgeAssist", "Blocks"); break; }
+            }
+        }
+        // Block In bind
+        if (MenuBinds::bi_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* bi = dynamic_cast<BlockIn*>(m);
+                if (bi) { applyBind(MenuBinds::bi_bind, p, &bi->enabled, "Block In", "Blocks"); break; }
+            }
+        }
+        // Clutch bind
+        if (MenuBinds::clutch_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* cl = dynamic_cast<Clutch*>(m);
+                if (cl) { applyBind(MenuBinds::clutch_bind, p, &cl->enabled, "Clutch", "Blocks"); break; }
+            }
         }
         // TickLocker bind
         if (g_GameVersion == LUNAR_1_8_9 && MenuBinds::tl_bind) {
@@ -2349,7 +3587,7 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
                 auto* tl = dynamic_cast<TickLocker*>(m);
                 if (tl) {
                     tl->enabled = !tl->enabled;
-                    NotificationSettings::Push("TickLocker", "Utility", tl->enabled);
+                    NotificationSettings::Push("TickLocker", "Blocks", tl->enabled);
                     break;
                 }
             }
@@ -2425,6 +3663,30 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
             }
             p = n;
         }
+        // Sprint bind
+        if (MenuBinds::sp_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* sp = dynamic_cast<Sprint*>(m);
+                if (sp) { applyBind(MenuBinds::sp_bind, p, &sp->enabled, "Sprint", "Move"); break; }
+            }
+        }
+        // NoSlow bind
+        if (MenuBinds::ns_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* ns = dynamic_cast<NoSlow*>(m);
+                if (ns) { applyBind(MenuBinds::ns_bind, p, &ns->enabled, "NoSlow", "Move"); break; }
+            }
+        }
+        // Strafe bind
+        if (MenuBinds::strf_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* sf = dynamic_cast<Strafe*>(m);
+                if (sf) { applyBind(MenuBinds::strf_bind, p, &sf->enabled, "Strafe", "Move"); break; }
+            }
+        }
         // Friends bind
         if (MenuBinds::fr_bind) {
             static bool p = false;
@@ -2442,6 +3704,54 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
             }
             p = n;
         }
+        // No Item Release bind
+        if (MenuBinds::nir_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* nir = dynamic_cast<NoItemRelease*>(m);
+                if (nir) { applyBind(MenuBinds::nir_bind, p, &nir->enabled, "No Item Release", "Utility"); break; }
+            }
+        }
+        // Anti Debuff bind
+        if (MenuBinds::ad_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* ad = dynamic_cast<AntiDebuff*>(m);
+                if (ad) { applyBind(MenuBinds::ad_bind, p, &ad->enabled, "Anti Debuff", "Utility"); break; }
+            }
+        }
+        // Ping Fix bind
+        if (MenuBinds::pf_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* pf = dynamic_cast<PingFix*>(m);
+                if (pf) { applyBind(MenuBinds::pf_bind, p, &pf->enabled, "Ping Fix", "Utility"); break; }
+            }
+        }
+        // Right Clicker bind
+        if (MenuBinds::rc_bind) {
+            static bool p = false;
+            bool n = (GetAsyncKeyState(MenuBinds::rc_bind) & 0x8000) != 0;
+            if (n && !p) {
+                RightClicker::enabled = !RightClicker::enabled;
+                NotificationSettings::Push("Right Clicker", "Utility", RightClicker::enabled);
+            }
+            p = n;
+        }
+        // BowBoost bind fires the shot, does not toggle the module
+        if (MenuBinds::bboost_bind) {
+            static bool p = false;
+            bool n = (GetAsyncKeyState(MenuBinds::bboost_bind) & 0x8000) != 0;
+            if (n && !p) for (auto* m : Modules::GetRegisteredModules()) {
+                auto* bb = dynamic_cast<BowBoost*>(m);
+                if (bb) {
+                    if (!bb->enabled) bb->enabled = true;
+                    BowBoost_Trigger();
+                    break;
+                }
+            }
+            p = n;
+        }
         // Notifications bind
         if (MenuBinds::notif_bind) {
             static bool p = false;
@@ -2449,13 +3759,41 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
             if (n && !p) NotificationSettings::enabled = !NotificationSettings::enabled;
             p = n;
         }
+        // Pointers bind
+        if (MenuBinds::ptr_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* ptr = dynamic_cast<Pointers*>(m);
+                if (ptr) { applyBind(MenuBinds::ptr_bind, p, &ptr->enabled, "Pointers", "Visual"); break; }
+            }
+        }
+        // Indicators bind
+        if (MenuBinds::ind_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* ind = dynamic_cast<Indicators*>(m);
+                if (ind) { applyBind(MenuBinds::ind_bind, p, &ind->enabled, "Indicators", "Visual"); break; }
+            }
+        }
+        // No Hurt Cam bind
+        if (MenuBinds::nhc_bind) {
+            static bool p = false;
+            for (auto* m : Modules::GetRegisteredModules()) {
+                auto* nhc = dynamic_cast<NoHurtCam*>(m);
+                if (nhc) { applyBind(MenuBinds::nhc_bind, p, &nhc->enabled, "No Hurt Cam", "Visual"); break; }
+            }
+        }
         // AutoRefill bind
         if (MenuBinds::ar_bind) {
             static bool p = false;
             bool n = (GetAsyncKeyState(MenuBinds::ar_bind) & 0x8000) != 0;
             if (n && !p) for (auto* m : Modules::GetRegisteredModules()) {
                 auto* ar = dynamic_cast<AutoRefill*>(m);
-                if (ar && ar->enabled) { AutoRefill_Trigger(); break; }
+                if (ar) {
+                    if (!ar->enabled) ar->enabled = true;
+                    AutoRefill_Trigger();
+                    break;
+                }
             }
             p = n;
         }
@@ -2486,76 +3824,134 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
     }
     else { m_prevToggleKey = false; }
 
-    if (!Overlay::isOpen) return;
+    static float menuVis = 0.f;
+    static bool  menuWasOpen = false;
+    if (Overlay::isOpen && !menuWasOpen)
+        menuVis = 0.f;
+    if (!Overlay::isOpen && menuWasOpen)
+        menuVis = 1.f;
+    menuWasOpen = Overlay::isOpen;
 
-    // ── Fenetre principale ────────────────────────────────────────
-    const float WIN_W = 900.f;
-    const float WIN_H = 640.f;
+    {
+        float dt = ImGui::GetIO().DeltaTime;
+        if (dt <= 0.f || dt > 0.05f) dt = 1.f / 60.f;
+        const float dur = 0.28f;
+        if (Overlay::isOpen)
+            menuVis = (std::min)(1.f, menuVis + dt / dur);
+        else
+            menuVis = (std::max)(0.f, menuVis - dt / dur);
+    }
+
+    if (!Overlay::isOpen) {
+        static bool announced = false;
+        if (!announced) {
+            announced = true;
+            bool prevNotif = NotificationSettings::enabled;
+            NotificationSettings::enabled = true;
+            std::string msg = std::string("Menu: ") + MenuBinds::VKToString(MenuBinds::open_bind);
+            NotificationSettings::PushInfo("lolxd", msg.c_str(), "Visual");
+            NotificationSettings::enabled = prevNotif || NotificationSettings::enabled;
+        }
+        if (menuVis <= 0.001f)
+            return;
+    }
+
+    if (m_activeTab < 0 || m_activeTab > 5) m_activeTab = 0;
+
+    const float t = Overlay::isOpen
+        ? (1.f - powf(1.f - menuVis, 3.f))
+        : (menuVis * menuVis * (3.f - 2.f * menuVis));
+    const float pop = 0.78f + 0.22f * t;
+
+    const float sc = std::clamp(GuiSettings::scale, 0.6f, 1.8f);
+    const float WIN_W = (GuiSettings::wide ? 1040.f : 920.f) * sc;
+    const float WIN_H = 640.f * sc;
     ImGuiIO& io = ImGui::GetIO();
+    io.FontGlobalScale = sc;
 
-    ImGui::SetNextWindowSize({ WIN_W, WIN_H }, ImGuiCond_Always);
+    ImDrawList* bg = ImGui::GetBackgroundDrawList();
+    bg->AddRectFilled({ 0.f, 0.f }, io.DisplaySize, IM_COL32(0, 0, 0, (int)(150.f * t)));
+
+    ImGui::SetNextWindowSize({ WIN_W * pop, WIN_H * pop }, ImGuiCond_Always);
     ImGui::SetNextWindowPos(
-        { io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f },
-        ImGuiCond_Once, { 0.5f, 0.5f });
+        { io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f + (1.f - t) * 28.f },
+        ImGuiCond_Always, { 0.5f, 0.5f });
+    ImGui::SetNextWindowBgAlpha(BG0.w * t);
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, t);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 22.f);
 
     ImGui::PushStyleColor(ImGuiCol_WindowBg, BG0);
     ImGui::PushStyleColor(ImGuiCol_Border, { 0.f, 0.f, 0.f, 0.f });
     ImGui::Begin("##phantom_main", nullptr,
         ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse |
         ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoTitleBar);
     ImGui::PopStyleColor(2);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 wp = ImGui::GetWindowPos();
-    dl->AddRect(wp, { wp.x + WIN_W, wp.y + WIN_H }, IM_COL32(40, 40, 40, 80), 16.f);
+    ImVec2 ws = ImGui::GetWindowSize();
+    dl->AddRect(wp, { wp.x + ws.x, wp.y + ws.y }, IM_COL32(255, 255, 255, 12), 22.f);
 
-    static const char* navLabels[] = { "Combat","Move","Visual","Block","Utility","Profiles","Unload" };
+    static const char* navLabels[] = { "Combat","Move","Visual","Utility","Blocks","Profiles","Unload" };
     const int NAV_N = 7;
-    const float pillH = 28.f;
+    const float pillH = 30.f;
     const float padX = 22.f;
     float totalNav = 0.f;
     for (int i = 0; i < NAV_N; i++)
-        totalNav += ImGui::CalcTextSize(navLabels[i]).x + padX + (i ? 4.f : 0.f);
+        totalNav += ImGui::CalcTextSize(navLabels[i]).x + padX + (i ? 6.f : 0.f);
 
-    float navX = (WIN_W - totalNav) * 0.5f;
-    ImGui::SetCursorPos({ navX, 12.f });
+    float navX = (ws.x - totalNav) * 0.5f;
+    ImGui::SetCursorPos({ navX, 14.f });
+    static ULONGLONG unloadHold = 0;
     for (int i = 0; i < NAV_N; i++) {
-        if (i > 0) ImGui::SameLine(0.f, 4.f);
+        if (i > 0) ImGui::SameLine(0.f, 6.f);
         bool isUnload = (i == NAV_N - 1);
         bool active = (m_activeTab == i);
         ImVec2 ts = ImGui::CalcTextSize(navLabels[i]);
         float pw = ts.x + padX;
         ImVec2 p = ImGui::GetCursorScreenPos();
         std::string nid = std::string("##nav_") + navLabels[i];
-        if (ImGui::InvisibleButton(nid.c_str(), { pw, pillH }))
-            m_activeTab = i;
+        ImGui::InvisibleButton(nid.c_str(), { pw, pillH });
         if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-        if (active)
-            dl->AddRectFilled(p, { p.x + pw, p.y + pillH }, IM_COL32(52, 52, 52, 255), 14.f);
+        if (isUnload) {
+            if (ImGui::IsItemActive()) {
+                if (!unloadHold) unloadHold = GetTickCount64();
+                float t = (float)(GetTickCount64() - unloadHold) / 650.f;
+                t = std::clamp(t, 0.f, 1.f);
+                dl->AddRectFilled(p, { p.x + pw * t, p.y + pillH }, IM_COL32(180, 50, 50, 180), 15.f);
+                if (t >= 1.f)
+                    Communication::GetSettings()->m_Destruct = true;
+            } else unloadHold = 0;
+        } else if (ImGui::IsItemClicked())
+            m_activeTab = i;
+        if (active && !isUnload)
+            dl->AddRectFilled(p, { p.x + pw, p.y + pillH }, IM_COL32(48, 48, 48, 255), 15.f);
         ImU32 col = isUnload ? ImGui::ColorConvertFloat4ToU32(RED)
-            : (active ? IM_COL32(230, 230, 230, 255) : IM_COL32(150, 150, 150, 255));
+            : (active ? IM_COL32(235, 235, 235, 255) : IM_COL32(145, 145, 145, 255));
         dl->AddText({ p.x + (pw - ts.x) * 0.5f, p.y + (pillH - ts.y) * 0.5f }, col, navLabels[i]);
     }
 
-    ImGui::Dummy({ 0.f, 8.f });
+    ImGui::Dummy({ 0.f, 10.f });
 
-    // ── Contenu ───────────────────────────────── ──────────────────
-    float contentH = WIN_H - ImGui::GetCursorPosY() - 12.f;
+    float contentH = ws.y - ImGui::GetCursorPosY() - 14.f;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.f, 0.f, 0.f, 0.f });
-    ImGui::BeginChild("##content", { WIN_W - 28.f, contentH }, false);
+    BeginMenuScrollChild("##content", { ws.x - 32.f, contentH });
 
     auto twoCol = [](auto&& leftFn, auto&& rightFn) {
         float avail = ImGui::GetContentRegionAvail().x;
-        float colW = (avail - 10.f) * 0.5f;
+        float colW = (avail - 12.f) * 0.5f;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.f, 0.f, 0.f, 0.f });
-        ImGui::BeginChild("##col_a", { colW, 0.f }, false);
+        BeginMenuScrollChild("##col_a", { colW, 0.f });
         leftFn();
+        CloseSnapCard();
         ImGui::EndChild();
-        ImGui::SameLine(0.f, 10.f);
-        ImGui::BeginChild("##col_b", { colW, 0.f }, false);
+        ImGui::SameLine(0.f, 12.f);
+        BeginMenuScrollChild("##col_b", { colW, 0.f });
         rightFn();
+        CloseSnapCard();
         ImGui::EndChild();
         ImGui::PopStyleColor();
     };
@@ -2567,47 +3963,72 @@ void ClientMenu::OnImGuiRender(JNIEnv* env) {
             RenderInvWalkTab();
             RenderFastStopTab();
             RenderNoJumpDelayTab();
+            RenderKeepSprintTab();
+            RenderStrafeTab();
         }, [&] {
             RenderQuickAccelTab();
             RenderSnapTapTab();
+            RenderSprintTab();
+            RenderNoSlowTab();
         });
         break;
     case 2:
         twoCol([&] {
+            RenderGuiModule();
             RenderArrayListTab();
             RenderEspTab();
             RenderItemEspTab();
             RenderPlayerEspTab();
             RenderStorageEspTab();
+            RenderBlockEspTab();
         }, [&] {
             RenderNametagTab();
             RenderTracerTab();
             RenderTrajectoriesTab();
             RenderChamsTab();
             RenderNotificationsTab();
+            RenderPointersTab();
+            RenderIndicatorsTab();
+            RenderNoHurtCamTab();
         });
         break;
     case 3:
         twoCol([&] {
             RenderFastPlaceTab();
-            if (g_GameVersion == LUNAR_1_8_9)
-                RenderTickLockerTab();
-        }, [&] { RenderFastBreakTab(); });
+            RenderChestStealerTab();
+            RenderInvManagerTab();
+            RenderScrollTab();
+            RenderAntiDebuffTab();
+            RenderPingFixTab();
+            RenderRightClickerTab();
+        }, [&] {
+            RenderArmorTab();
+            RenderWeaponsTab();
+            RenderFriendsTab();
+            RenderEnemiesTab();
+            RenderNoItemReleaseTab();
+            RenderBlinkTab();
+            RenderBowBoostTab();
+        });
         break;
     case 4:
         twoCol([&] {
-            RenderScrollTab();
-            RenderArmorTab();
+            RenderBridgeAssistTab();
+            RenderClutchTab();
+            RenderBlockInTab();
         }, [&] {
-            RenderFriendsTab();
-            RenderEnemiesTab();
+            RenderAutoToolTab();
+            RenderFastBreakTab();
+            if (g_GameVersion == LUNAR_1_8_9)
+                RenderTickLockerTab();
         });
         break;
     case 5: RenderSettingsTab(); break;
-    case 6: RenderUnloadTab(); break;
     }
 
+    CloseSnapCard();
     ImGui::EndChild();
     ImGui::PopStyleColor();
     ImGui::End();
+    ImGui::PopStyleVar(2);
 }

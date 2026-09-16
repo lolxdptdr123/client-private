@@ -324,6 +324,7 @@ void Esp::OnRender(JNIEnv* env) {
 
 void Esp::OnImGuiRender(JNIEnv* env) {
     if (!enabled || !env) return;
+    if (EspSettings::renderMode == 1) return;
     if (env->ExceptionCheck()) env->ExceptionClear();
 
     jobject playerObj = Minecraft::GetThePlayer(env);
@@ -387,13 +388,20 @@ void Esp::OnImGuiRender(JNIEnv* env) {
 
         const float* col = isFriend ? EspSettings::friendColor : (isEnemy ? EspSettings::enemyColor : EspSettings::outline2dColor);
         ImU32 outline = ImGui::ColorConvertFloat4ToU32(ImVec4(col[0], col[1], col[2], col[3]));
-        ImU32 fill = ImGui::ColorConvertFloat4ToU32(ImVec4(
-            EspSettings::fill2dColor[0], EspSettings::fill2dColor[1],
-            EspSettings::fill2dColor[2], EspSettings::fill2dColor[3]));
 
-        dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), fill);
-        dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), IM_COL32(0, 0, 0, 220), 0.f, 0, EspSettings::outline2dWidth + 1.f);
-        dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), outline, 0.f, 0, EspSettings::outline2dWidth);
+        const bool draw2d = EspSettings::renderMode == 0 || EspSettings::renderMode == 2;
+        if (!draw2d) { env->DeleteLocalRef(e); continue; }
+
+        if (EspSettings::mode2d == 1 || EspSettings::mode2d == 2) {
+            ImU32 fill = ImGui::ColorConvertFloat4ToU32(ImVec4(
+                EspSettings::fill2dColor[0], EspSettings::fill2dColor[1],
+                EspSettings::fill2dColor[2], EspSettings::fill2dColor[3]));
+            dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), fill);
+        }
+        if (EspSettings::mode2d == 0 || EspSettings::mode2d == 2) {
+            dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), IM_COL32(0, 0, 0, 220), 0.f, 0, EspSettings::outline2dWidth + 1.f);
+            dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), outline, 0.f, 0, EspSettings::outline2dWidth);
+        }
 
         if (EspSettings::showHealthBar) {
             float hp = ent->GetHealth(env) / 20.f;

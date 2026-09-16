@@ -7,11 +7,17 @@
 #include "Modules/Combat/clicker.h"
 #include "Modules/Combat/velocity.h"
 #include "Modules/Combat/Throw.h"
-#include "Modules/Combat/Piercing.h"
 #include "Modules/Combat/KeepSprint.h"
 #include "Modules/Combat/Criticals.h"
+#include "Modules/Combat/SprintReset.h"
+#include "Modules/Combat/LagRange.h"
+#include "Modules/Combat/Reach.h"
+#include "Modules/Combat/Blink.h"
 #include "Modules/Combat/AutoRod.h"
 #include "Modules/Combat/AntiBot.h"
+#include "Modules/Combat/AutoBlock.h"
+#include "Modules/Combat/Backtrack.h"
+#include "Modules/Combat/AutoWeapon.h"
 #include "Modules/Combat/AutoRefill.h"
 #include "Modules/Visuals/arraylist.h"
 #include "Modules/Visuals/Chams.h"
@@ -19,22 +25,41 @@
 #include "Modules/Visuals/ItemEsp.h"
 #include "Modules/Visuals/PlayerEsp.h"
 #include "Modules/Visuals/StorageEsp.h"
+#include "Modules/Visuals/BlockEsp.h"
 #include "Modules/Visuals/Nametag.h"
 #include "Modules/Visuals/Tracer.h"
 #include "Modules/Visuals/Trajectories.h"
 #include "Modules/Visuals/Notifications.h"
+#include "Modules/Visuals/Pointers.h"
+#include "Modules/Visuals/Indicators.h"
+#include "Modules/Visuals/NoHurtCam.h"
 #include "Modules/Misc/Friends.h"
 #include "Modules/Misc/Enemies.h"
+#include "Modules/Misc/NoItemRelease.h"
+#include "Modules/Misc/AntiDebuff.h"
+#include "Modules/Misc/PingFix.h"
+#include "Modules/Misc/RightClicker.h"
+#include "Modules/Misc/BowBoost.h"
 #include "Modules/Misc/FastPlace.h"
 #include "Modules/Misc/FastBreak.h"
+#include "Modules/Misc/AutoTool.h"
+#include "Modules/Misc/ChestStealer.h"
+#include "Modules/Misc/InvManager.h"
+#include "Modules/Misc/BridgeAssist.h"
+#include "Modules/Misc/BlockIn.h"
+#include "Modules/Misc/Clutch.h"
 #include "Modules/Misc/TickLocker.h"
 #include "Modules/Misc/InvWalk.h"
 #include "Modules/Misc/FastStop.h"
 #include "Modules/Misc/NoJumpDelay.h"
 #include "Modules/Misc/QuickAccel.h"
 #include "Modules/Misc/SnapTap.h"
+#include "Modules/Misc/Sprint.h"
+#include "Modules/Misc/NoSlow.h"
+#include "Modules/Misc/Strafe.h"
 #include "Modules/Misc/Scroll.h"
 #include "Modules/Misc/armor.h"
+#include "Modules/Misc/Weapons.h"
 #include "Modules/Misc/Armorswitcher.h"
 
 #include <fstream>
@@ -235,6 +260,16 @@ void RegisterBinds() {
     BindB("clicker.requireClick", &Clicker::requireClick);
     BindB("clicker.weaponsOnly", &Clicker::weaponsOnly);
 
+    BindI("rc.cps", &RightClicker::cps);
+    BindB("rc.blatant", &RightClicker::blatant);
+    BindB("rc.exhaust", &RightClicker::exhaust);
+
+    BindI("bb.chargeTicks", &BowBoostSettings::chargeTicks);
+    BindI("bb.delayMs", &BowBoostSettings::delayMs);
+    BindB("bb.switchItem", &BowBoostSettings::switchItem);
+    BindB("bb.lookUp", &BowBoostSettings::lookUp);
+    BindF("bb.pitch", &BowBoostSettings::pitch);
+
     BindI("aa.mode", &AimAssistSettings::currentMode);
     BindF("aa.speed", &AimAssistSettings::speed);
     BindF("aa.fovMin", &AimAssistSettings::fovMin);
@@ -284,10 +319,6 @@ void RegisterBinds() {
     BindF("throw.pearlSpeed", &ThrowSettings::pearlSpeed);
     BindI("throw.pearlBind", &ThrowSettings::pearlBind);
 
-    BindB("prc.weaponsOnly", &PiercingSettings::weaponsOnly);
-    BindB("prc.throughBlock", &PiercingSettings::throughBlock);
-    BindB("prc.targetEnemiesOnly", &PiercingSettings::targetEnemiesOnly);
-
     BindI("ks.mode", &KeepSprintSettings::mode);
     BindF("ks.speed", &KeepSprintSettings::speed);
     BindI("ks.chance", &KeepSprintSettings::chance);
@@ -298,6 +329,27 @@ void RegisterBinds() {
     BindI("cr.chance", &CriticalsSettings::chance);
     BindF("cr.timerSpeed", &CriticalsSettings::timerSpeed);
     BindI("cr.maxQueueTime", &CriticalsSettings::maxQueueTime);
+
+    BindI("sr.mode", &SprintResetSettings::mode);
+    BindI("sr.delayMs", &SprintResetSettings::delayMs);
+    BindI("sr.stopMs", &SprintResetSettings::stopMs);
+    BindB("sr.randomize", &SprintResetSettings::randomize);
+    BindB("sr.waitForDamage", &SprintResetSettings::waitForDamage);
+    BindB("sr.holdingWeapon", &SprintResetSettings::holdingWeapon);
+
+    BindI("lr.mode", &LagRangeSettings::mode);
+    BindF("lr.activationDistance", &LagRangeSettings::activationDistance);
+    BindF("lr.flushDistance", &LagRangeSettings::flushDistance);
+    BindI("lr.delay", &LagRangeSettings::delay);
+    BindB("lr.onlyWeapon", &LagRangeSettings::onlyWeapon);
+    BindB("lr.onlySprinting", &LagRangeSettings::onlySprinting);
+    BindB("lr.drawBox", &LagRangeSettings::drawBox);
+    BindC("lr.boxColor", LagRangeSettings::boxColor);
+    BindC("lr.outlineColor", LagRangeSettings::outlineColor);
+
+    BindF("rc.distance", &ReachSettings::distance);
+    BindI("rc.activateTicks", &ReachSettings::activateTicks);
+    BindB("rc.onlySprinting", &ReachSettings::onlySprinting);
 
     BindF("rod.fov", &AutoRodSettings::fov);
     BindF("rod.maxLookFov", &AutoRodSettings::maxLookFov);
@@ -320,6 +372,49 @@ void RegisterBinds() {
     BindB("ab.checkTab", &AntiBotSettings::checkTab);
     BindB("ab.checkPackets", &AntiBotSettings::checkPackets);
     BindI("ab.packetGrace", &AntiBotSettings::packetGrace);
+
+    BindF("abl.range", &AutoBlockSettings::range);
+    BindI("abl.maxHurtTimeMs", &AutoBlockSettings::maxHurtTimeMs);
+    BindI("abl.maxHoldMs", &AutoBlockSettings::maxHoldMs);
+    BindB("abl.forceAnim", &AutoBlockSettings::forceAnim);
+    BindB("abl.forceAnimInRange", &AutoBlockSettings::forceAnimInRange);
+    BindI("abl.lagChance", &AutoBlockSettings::lagChance);
+    BindI("abl.lagMaxMs", &AutoBlockSettings::lagMaxMs);
+    BindB("abl.preventDelayAttacks", &AutoBlockSettings::preventDelayAttacks);
+    BindB("abl.blockAgainImmediately", &AutoBlockSettings::blockAgainImmediately);
+    BindB("abl.condLmb", &AutoBlockSettings::condLmb);
+    BindB("abl.condRmb", &AutoBlockSettings::condRmb);
+    BindB("abl.condDamaged", &AutoBlockSettings::condDamaged);
+
+    BindI("bt.mode", &BacktrackSettings::mode);
+    BindI("bt.delayInTicks", &BacktrackSettings::delayInTicks);
+    BindI("bt.cooldown", &BacktrackSettings::cooldown);
+    BindB("bt.distanceCheck", &BacktrackSettings::distanceCheck);
+    BindF("bt.distance", &BacktrackSettings::distance);
+    BindF("bt.distanceMax", &BacktrackSettings::distanceMax);
+    BindI("bt.smoothDelayMs", &BacktrackSettings::smoothDelayMs);
+    BindI("bt.forceFlushMs", &BacktrackSettings::forceFlushMs);
+    BindB("bt.onlySprinting", &BacktrackSettings::onlySprinting);
+    BindI("bt.maxDelay", &BacktrackSettings::maxDelay);
+    BindI("bt.minDelay", &BacktrackSettings::minDelay);
+    BindI("bt.delayBetweenLags", &BacktrackSettings::delayBetweenLags);
+    BindI("bt.stopAtHurt", &BacktrackSettings::stopAtHurt);
+    BindI("bt.disableOn", &BacktrackSettings::disableOn);
+    BindF("bt.stopOnAttackRange", &BacktrackSettings::stopOnAttackRange);
+    BindB("bt.onlyWhenNeeded", &BacktrackSettings::onlyWhenNeeded);
+    BindB("bt.continueAtHurtTime", &BacktrackSettings::continueAtHurtTime);
+    BindB("bt.drawBox", &BacktrackSettings::drawBox);
+    BindC("bt.boxColor", BacktrackSettings::boxColor);
+    BindC("bt.outlineColor", BacktrackSettings::outlineColor);
+
+    BindI("bl.direction", &BlinkSettings::direction);
+    BindI("bl.autoSendDelay", &BlinkSettings::autoSendDelay);
+    BindB("bl.disableOnLocalDamage", &BlinkSettings::disableOnLocalDamage);
+    BindB("bl.disableOnTargetDamage", &BlinkSettings::disableOnTargetDamage);
+    BindB("bl.drawEsp", &BlinkSettings::drawEsp);
+    BindC("bl.espColor", BlinkSettings::espColor);
+
+    BindI("aw.activationMs", &AutoWeaponSettings::activationMs);
 
     BindI("ar.mode", &AutoRefillSettings::mode);
     BindI("ar.itemMode", &AutoRefillSettings::itemMode);
@@ -422,6 +517,18 @@ void RegisterBinds() {
     BindC("sesp.hopperColor", StorageEspSettings::hopperColor);
     BindC("sesp.labelColor", StorageEspSettings::labelColor);
 
+    BindI("besp.rangeChunks", &BlockEspSettings::rangeChunks);
+    BindI("besp.limitPerChunk", &BlockEspSettings::limitPerChunk);
+    BindF("besp.outlineWidth", &BlockEspSettings::outlineWidth);
+    for (int i = 0; i < 32; i++) {
+        static char ik[32][24];
+        static char ck[32][24];
+        snprintf(ik[i], 24, "besp.id.%d", i);
+        snprintf(ck[i], 24, "besp.col.%d", i);
+        BindI(ik[i], &BlockEspSettings::ids[i]);
+        BindC(ck[i], BlockEspSettings::colors[i]);
+    }
+
     BindB("nt.showNames", &NametagSettings::showNames);
     BindB("nt.showHealth", &NametagSettings::showHealth);
     BindB("nt.showDistance", &NametagSettings::showDistance);
@@ -464,11 +571,32 @@ void RegisterBinds() {
     BindF("tj.lineWidth", &TrajectoriesSettings::lineWidth);
     BindC("tj.arcColor", TrajectoriesSettings::arcColor);
 
+    BindF("ptr.range", &PointersSettings::range);
+    BindF("ptr.ignoreFov", &PointersSettings::ignoreFov);
+    BindB("ptr.hideFriendlies", &PointersSettings::hideFriendlies);
+    BindI("ptr.style", &PointersSettings::style);
+    BindI("ptr.colorMode", &PointersSettings::colorMode);
+    BindC("ptr.nearColor", PointersSettings::nearColor);
+    BindC("ptr.farColor", PointersSettings::farColor);
+    BindC("ptr.enemyColor", PointersSettings::enemyColor);
+    BindC("ptr.friendColor", PointersSettings::friendColor);
+    BindF("ptr.nearDist", &PointersSettings::nearDist);
+    BindF("ptr.farDist", &PointersSettings::farDist);
+    BindF("ptr.scale", &PointersSettings::scale);
+    BindF("ptr.radius", &PointersSettings::radius);
+    BindB("ptr.distanceRadius", &PointersSettings::distanceRadius);
+
+    BindB("ind.fireballs", &IndicatorsSettings::fireballs);
+    BindB("ind.pearls", &IndicatorsSettings::pearls);
+    BindB("ind.arrows", &IndicatorsSettings::arrows);
+    BindB("ind.comingCloser", &IndicatorsSettings::comingCloser);
+
     BindB("notif.hideIfInGame", &NotificationSettings::hideIfInGame);
     BindB("notif.hideIfHoldBind", &NotificationSettings::hideIfHoldBind);
     BindB("notif.catCombat", &NotificationSettings::catCombat);
     BindB("notif.catVisual", &NotificationSettings::catVisual);
     BindB("notif.catUtility", &NotificationSettings::catUtility);
+    BindB("notif.catBlocks", &NotificationSettings::catBlocks);
     BindF("notif.duration", &NotificationSettings::duration);
     BindF("notif.animSpeed", &NotificationSettings::animSpeed);
 
@@ -493,6 +621,62 @@ void RegisterBinds() {
     BindF("fb.power", &FastBreakSettings::power);
     BindF("fb.multiplier", &FastBreakSettings::multiplier);
 
+    BindB("at.switchBack", &AutoToolSettings::switchBack);
+    BindB("at.onlyMining", &AutoToolSettings::onlyMining);
+    BindB("at.preferSilk", &AutoToolSettings::preferSilk);
+    BindI("at.delayMs", &AutoToolSettings::delayMs);
+
+    BindI("cs.delayMin", &ChestStealerSettings::delayMin);
+    BindI("cs.delayMax", &ChestStealerSettings::delayMax);
+    BindI("cs.firstDelay", &ChestStealerSettings::firstDelay);
+    BindI("cs.closeDelay", &ChestStealerSettings::closeDelay);
+    BindB("cs.autoClose", &ChestStealerSettings::autoClose);
+    BindB("cs.nameCheck", &ChestStealerSettings::nameCheck);
+    BindB("cs.randomize", &ChestStealerSettings::randomize);
+    BindB("cs.intelligent", &ChestStealerSettings::intelligent);
+
+    BindI("im.delayAfterOpen", &InvManagerSettings::delayAfterOpen);
+    BindI("im.speed", &InvManagerSettings::speed);
+    BindB("im.smartSpeed", &InvManagerSettings::smartSpeed);
+    BindB("im.randomize", &InvManagerSettings::randomize);
+    BindB("im.equipArmor", &InvManagerSettings::equipArmor);
+    BindB("im.sortHotbar", &InvManagerSettings::sortHotbar);
+    BindB("im.smartFallbacks", &InvManagerSettings::smartFallbacks);
+    for (int i = 0; i < 9; i++) {
+        static char keys[9][24];
+        snprintf(keys[i], 24, "im.hotbar.%d", i);
+        BindI(keys[i], &InvManagerSettings::hotbar[i]);
+    }
+
+    BindF("ba.edgeOffset", &BridgeAssistSettings::edgeOffset);
+    BindI("ba.unsneakDelay", &BridgeAssistSettings::unsneakDelay);
+    BindF("ba.pitch", &BridgeAssistSettings::pitch);
+    BindB("ba.onlyBlocks", &BridgeAssistSettings::onlyBlocks);
+    BindB("ba.lookingDown", &BridgeAssistSettings::lookingDown);
+    BindB("ba.sneakOnJump", &BridgeAssistSettings::sneakOnJump);
+
+    BindF("bi.speed", &BlockInSettings::speed);
+    BindB("bi.onlyOnGround", &BlockInSettings::onlyOnGround);
+
+    BindI("cl.range", &ClutchSettings::range);
+    BindF("cl.fov", &ClutchSettings::fov);
+    BindI("cl.minHeight", &ClutchSettings::minHeight);
+    BindF("cl.clickSpeed", &ClutchSettings::clickSpeed);
+    BindF("cl.randomization", &ClutchSettings::randomization);
+    BindI("cl.selectBlocks", &ClutchSettings::selectBlocks);
+    BindB("cl.onlySideways", &ClutchSettings::onlySideways);
+    BindF("cl.baseSpeed", &ClutchSettings::baseSpeed);
+    BindF("cl.acceleration", &ClutchSettings::acceleration);
+    BindF("cl.accelStrength", &ClutchSettings::accelStrength);
+    BindB("cl.multipoint", &ClutchSettings::multipoint);
+    BindI("cl.snapDelay", &ClutchSettings::snapDelay);
+    BindI("cl.snapDuration", &ClutchSettings::snapDuration);
+    BindB("cl.keepJumpDir", &ClutchSettings::keepJumpDir);
+    BindB("cl.disableAfter", &ClutchSettings::disableAfter);
+    BindB("cl.midAir", &ClutchSettings::midAir);
+    BindB("cl.onHurt", &ClutchSettings::onHurt);
+    BindB("cl.backwards", &ClutchSettings::backwards);
+
     BindB("tl.renderSelectedBlock", &TickLockerSettings::renderSelectedBlock);
     BindB("tl.showOutline", &TickLockerSettings::showOutline);
     BindB("tl.showFill", &TickLockerSettings::showFill);
@@ -508,6 +692,25 @@ void RegisterBinds() {
     BindI("st.axis", &SnapTapSettings::axis);
     BindB("st.onlyOnGround", &SnapTapSettings::onlyOnGround);
     BindB("st.disableOnSneak", &SnapTapSettings::disableOnSneak);
+
+    BindB("sp.usingItem", &SprintSettings::usingItem);
+    BindB("sp.backwards", &SprintSettings::backwards);
+    BindB("sp.sideways", &SprintSettings::sideways);
+    BindB("sp.inInventory", &SprintSettings::inInventory);
+
+    BindI("ns.swords", &NoSlowSettings::swords);
+    BindI("ns.bows", &NoSlowSettings::bows);
+    BindI("ns.consumables", &NoSlowSettings::consumables);
+
+    BindI("nir.mode", &NoItemReleaseSettings::mode);
+    BindB("ad.blindness", &AntiDebuffSettings::blindness);
+    BindB("ad.nausea", &AntiDebuffSettings::nausea);
+
+    BindI("sf.onGround", &StrafeSettings::onGround);
+    BindI("sf.inAir", &StrafeSettings::inAir);
+    BindI("sf.onJump", &StrafeSettings::onJump);
+    BindI("sf.maxHurtTime", &StrafeSettings::maxHurtTime);
+    BindB("sf.holdingWeapon", &StrafeSettings::holdingWeapon);
 
     BindI("scroll.bind", &Scroll::scroll_bind);
     BindI("scroll.delay", &Scroll::scrollDelay);
@@ -534,14 +737,37 @@ void RegisterBinds() {
         }
     }
 
+    BindB("wp.fist", &WeaponsSettings::fist);
+    BindB("wp.swords", &WeaponsSettings::swords);
+    BindB("wp.axes", &WeaponsSettings::axes);
+    BindB("wp.sharpness", &WeaponsSettings::sharpness);
+    BindB("wp.knockback", &WeaponsSettings::knockback);
+    BindB("wp.fireAspect", &WeaponsSettings::fireAspect);
+    for (int i = 0; i < 32; i++) {
+        static char ek[32][24];
+        snprintf(ek[i], 24, "wp.extra.%d", i);
+        BindI(ek[i], &WeaponsSettings::extraIds[i]);
+    }
+    for (int i = 0; i < 9; i++) {
+        static char hk[9][24];
+        snprintf(hk[i], 24, "wp.hotbar.%d", i);
+        BindB(hk[i], &WeaponsSettings::hotbar[i]);
+    }
+
     BindI("bind.lc", &MenuBinds::lc_bind);
     BindI("bind.aa", &MenuBinds::aa_bind);
     BindI("bind.vel", &MenuBinds::vel_bind);
-    BindI("bind.prc", &MenuBinds::prc_bind);
     BindI("bind.ks", &MenuBinds::ks_bind);
     BindI("bind.cr", &MenuBinds::cr_bind);
+    BindI("bind.sr", &MenuBinds::sr_bind);
+    BindI("bind.lr", &MenuBinds::lr_bind);
+    BindI("bind.reach", &MenuBinds::reach_bind);
+    BindI("bind.blink", &MenuBinds::blink_bind);
     BindI("bind.rod", &MenuBinds::rod_bind);
     BindI("bind.ab", &MenuBinds::ab_bind);
+    BindI("bind.ablock", &MenuBinds::ablock_bind);
+    BindI("bind.bt", &MenuBinds::bt_bind);
+    BindI("bind.aw", &MenuBinds::aw_bind);
     BindI("bind.ar", &MenuBinds::ar_bind);
     BindI("bind.al", &MenuBinds::al_bind);
     BindI("bind.ch", &MenuBinds::ch_bind);
@@ -549,33 +775,56 @@ void RegisterBinds() {
     BindI("bind.itemesp", &MenuBinds::itemesp_bind);
     BindI("bind.pesp", &MenuBinds::pesp_bind);
     BindI("bind.sesp", &MenuBinds::sesp_bind);
+    BindI("bind.besp", &MenuBinds::besp_bind);
     BindI("bind.ntag", &MenuBinds::ntag_bind);
     BindI("bind.tr", &MenuBinds::tr_bind);
     BindI("bind.tj", &MenuBinds::tj_bind);
     BindI("bind.fr", &MenuBinds::fr_bind);
     BindI("bind.en", &MenuBinds::en_bind);
+    BindI("bind.nir", &MenuBinds::nir_bind);
+    BindI("bind.ad", &MenuBinds::ad_bind);
+    BindI("bind.pf", &MenuBinds::pf_bind);
+    BindI("bind.rc", &MenuBinds::rc_bind);
+    BindI("bind.bboost", &MenuBinds::bboost_bind);
     BindI("bind.fp", &MenuBinds::fp_bind);
     BindI("bind.fb", &MenuBinds::fb_bind);
+    BindI("bind.at", &MenuBinds::at_bind);
+    BindI("bind.cs", &MenuBinds::cs_bind);
+    BindI("bind.im", &MenuBinds::im_bind);
+    BindI("bind.ba", &MenuBinds::ba_bind);
+    BindI("bind.bi", &MenuBinds::bi_bind);
+    BindI("bind.clutch", &MenuBinds::clutch_bind);
     BindI("bind.tl", &MenuBinds::tl_bind);
     BindI("bind.iw", &MenuBinds::iw_bind);
     BindI("bind.fs", &MenuBinds::fs_bind);
     BindI("bind.njd", &MenuBinds::njd_bind);
     BindI("bind.qa", &MenuBinds::qa_bind);
     BindI("bind.st", &MenuBinds::st_bind);
+    BindI("bind.sp", &MenuBinds::sp_bind);
+    BindI("bind.ns", &MenuBinds::ns_bind);
+    BindI("bind.strf", &MenuBinds::strf_bind);
     BindI("bind.notif", &MenuBinds::notif_bind);
+    BindI("bind.ptr", &MenuBinds::ptr_bind);
+    BindI("bind.ind", &MenuBinds::ind_bind);
+    BindI("bind.nhc", &MenuBinds::nhc_bind);
     BindI("bind.destruct", &MenuBinds::destruct_bind);
-    BindI("bind.open", &MenuBinds::open_bind);
 }
 
 bool* EnabledOf(Module* m) {
     if (!m) return nullptr;
     if (auto* x = dynamic_cast<AimAssist*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<Velocity*>(m)) return &x->enabled;
-    if (auto* x = dynamic_cast<Piercing*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<KeepSprint*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<Criticals*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<SprintReset*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<LagRange*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<Reach*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<Blink*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<AutoRod*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<AntiBot*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<AutoBlock*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<Backtrack*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<AutoWeapon*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<AutoRefill*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<ArrayList*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<Chams*>(m)) return &x->enabled;
@@ -583,23 +832,41 @@ bool* EnabledOf(Module* m) {
     if (auto* x = dynamic_cast<ItemEsp*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<PlayerEsp*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<StorageEsp*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<BlockEsp*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<Nametag*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<Tracer*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<Trajectories*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<FastPlace*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<FastBreak*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<AutoTool*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<ChestStealer*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<InvManager*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<BridgeAssist*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<BlockIn*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<Clutch*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<TickLocker*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<InvWalk*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<FastStop*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<NoJumpDelay*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<QuickAccel*>(m)) return &x->enabled;
     if (auto* x = dynamic_cast<SnapTap*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<Sprint*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<NoSlow*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<Strafe*>(m)) return &x->enabled;
     if (dynamic_cast<LeftClicker*>(m)) return &Clicker::enabled;
     if (dynamic_cast<ThrowModule*>(m)) return &ThrowSettings::enabled;
     if (dynamic_cast<FriendsModule*>(m)) return &FriendsSettings::enabled;
     if (dynamic_cast<EnemiesModule*>(m)) return &EnemiesSettings::enabled;
+    if (auto* x = dynamic_cast<NoItemRelease*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<AntiDebuff*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<PingFix*>(m)) return &x->enabled;
+    if (dynamic_cast<RightClickerModule*>(m)) return &RightClicker::enabled;
+    if (auto* x = dynamic_cast<BowBoost*>(m)) return &x->enabled;
     if (dynamic_cast<ScrollModule*>(m)) return &Scroll::enabled;
     if (dynamic_cast<NotificationsModule*>(m)) return &NotificationSettings::enabled;
+    if (auto* x = dynamic_cast<Pointers*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<Indicators*>(m)) return &x->enabled;
+    if (auto* x = dynamic_cast<NoHurtCam*>(m)) return &x->enabled;
     if (dynamic_cast<ArmorSwitcher*>(m)) return &Armor::enabled;
     return nullptr;
 }

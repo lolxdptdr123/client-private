@@ -5,8 +5,8 @@
 
 namespace AntiBotSettings {
     inline int  minTicks = 20;
-    inline bool checkTab = true;
-    inline bool checkPackets = true;
+    inline bool checkTab = false;
+    inline bool checkPackets = false;
     inline int  packetGrace = 40;
 }
 

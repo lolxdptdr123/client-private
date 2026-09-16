@@ -40,3 +40,9 @@ public:
 };
 
 extern GameVersions g_GameVersion;
+
+enum GameLauncher {
+	LAUNCHER_LUNAR,
+	LAUNCHER_CHEATBREAKER,
+};
+extern GameLauncher g_GameLauncher;

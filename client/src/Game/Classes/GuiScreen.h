@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 class GuiScreen
 {
@@ -6,6 +6,7 @@ public:
     bool IsInventory(JNIEnv* env);
     bool IsChat(JNIEnv* env);
     bool IsContainerGui(JNIEnv* env);
+    bool IsChestGui(JNIEnv* env);
 
     bool IsInMenu() const {
         return this != NULL;

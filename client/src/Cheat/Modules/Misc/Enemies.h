@@ -32,6 +32,11 @@ namespace EnemiesSettings {
     int Count();
     std::vector<std::string> DisplayCopy();
     void ReplaceFromNames(const std::vector<std::string>& names);
+
+    inline bool RestrictsTargets() { return enabled && Count() > 0; }
+    inline bool BlocksTarget(JNIEnv* env, Player* p) {
+        return RestrictsTargets() && !IsEnemy(env, p);
+    }
 }
 
 class EnemiesModule : public Module {

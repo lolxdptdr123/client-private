@@ -145,7 +145,7 @@ static bool ConsiderTarget(JNIEnv* env, Player* local, jobject e, bool isPlayer,
     if (ent->IsInvisible(env)) return false;
     if (isPlayer) {
         if (FriendsSettings::IsFriend(env, ent)) return false;
-        if (AutoRodSettings::targetEnemiesOnly && !EnemiesSettings::IsEnemy(env, ent)) return false;
+        if (EnemiesSettings::BlocksTarget(env, ent)) return false;
         if (AntiBot_IsBot(env, e)) return false;
         if (AutoRodSettings::ignoreEating && ent->IsUsingItem(env)) return false;
     }

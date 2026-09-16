@@ -7,6 +7,7 @@
 #include "../Mapper.h"
 
 #include "../../Cheat/Hack.h"
+#include "InventoryPlayer.h"
 #include <cmath>
 
 std::string Player::GetName(JNIEnv* env, bool shouldEraseColor)
@@ -747,12 +748,46 @@ jobject Player::GetHeldItem(JNIEnv* env)
 	if (this == NULL || !env)
 		return NULL;
 
+	if (Mapper::IsCheatBreaker()) {
+		jclass cls = env->GetObjectClass((jobject)this);
+		if (cls) {
+			std::string sig = "()" + Mapper::Get("net/minecraft/item/ItemStack", 2);
+			jclass w = cls;
+			while (w) {
+				jmethodID m = env->GetMethodID(w, "d_", sig.c_str());
+				if (env->ExceptionCheck()) { env->ExceptionClear(); m = nullptr; }
+				if (m) {
+					jobject held = env->CallObjectMethod((jobject)this, m);
+					if (env->ExceptionCheck()) { env->ExceptionClear(); held = nullptr; }
+					if (held) {
+						if (w != cls) env->DeleteLocalRef(w);
+						env->DeleteLocalRef(cls);
+						return held;
+					}
+				}
+				jclass s = env->GetSuperclass(w);
+				if (w != cls) env->DeleteLocalRef(w);
+				w = s;
+			}
+			env->DeleteLocalRef(cls);
+		}
+
+		jobject invObj = GetInventoryPlayer(env);
+		if (invObj) {
+			auto* inv = reinterpret_cast<InventoryPlayer*>(invObj);
+			int slot = inv->GetSlot(env);
+			jobject stack = inv->GetStackInSlot(slot, env);
+			env->DeleteLocalRef(invObj);
+			if (stack) return stack;
+		}
+	}
+
 	const auto playerClazz = (Klass*)env->GetObjectClass((jobject)this);
 	if (!playerClazz)
 		return NULL;
 
 	const auto getHeldItemMethod = playerClazz->GetMethod(env, Mapper::Get("getHeldItem").data(), Mapper::Get("net/minecraft/item/ItemStack", 3).data());
-
+	if (env->ExceptionCheck()) env->ExceptionClear();
 	env->DeleteLocalRef((jclass)playerClazz);
 
 	if (!getHeldItemMethod)

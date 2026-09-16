@@ -6,6 +6,7 @@
 #include "../../../Game/Classes/KeyBinding.h"
 #include "../../../Game/Classes/ItemStack.h"
 #include "../Misc/Overlay.h"
+#include "../Misc/Weapons.h"
 #include <chrono>
 
 static int  g_lastHrt = 0;
@@ -86,15 +87,8 @@ void Velocity::Run(JNIEnv* env) {
     if (!newHit)
         return;
 
-    if (VelocitySettings::weaponsOnly) {
-        jobject held = player->GetHeldItem(env);
-        bool ok = false;
-        if (held) {
-            ok = ((ItemStack*)held)->IsWeapon(env);
-            env->DeleteLocalRef(held);
-        }
-        if (!ok) return;
-    }
+    if (VelocitySettings::weaponsOnly && !Weapons_IsHolding(env))
+        return;
 
     if (VelocitySettings::onlyLookingAtPlayer) {
         jobject pointed = Minecraft::GetPointedEntity(env);

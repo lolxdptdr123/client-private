@@ -22,6 +22,7 @@
 #include <thread>
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
 
 static std::thread       g_clickThread;
 static std::thread       g_hookThread;
@@ -30,6 +31,7 @@ static std::atomic<bool> g_running{ false };
 // ── Require Click ─────────────────────────────────────────────────────────────
 static HHOOK             g_mouseHook = nullptr;
 std::atomic<bool> g_physicalDown{ false };
+std::atomic<bool> g_physicalRightDown{ false };
 
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
@@ -38,6 +40,8 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
         if (!isInjected) {
             if (wParam == WM_LBUTTONDOWN) g_physicalDown = true;
             if (wParam == WM_LBUTTONUP)   g_physicalDown = false;
+            if (wParam == WM_RBUTTONDOWN) g_physicalRightDown = true;
+            if (wParam == WM_RBUTTONUP)   g_physicalRightDown = false;
         }
     }
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);

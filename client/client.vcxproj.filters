@@ -72,6 +72,9 @@
     <ClInclude Include="src\Cheat\Modules\Visuals\StorageEsp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Visuals\BlockEsp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Visuals\Nametag.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -222,6 +225,9 @@
     <ClInclude Include="src\Cheat\Modules\Misc\Armorswitcher.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\Weapons.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Combat\SwordCheck.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -240,10 +246,43 @@
     <ClInclude Include="src\Cheat\Modules\Misc\Enemies.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\NoItemRelease.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\AntiDebuff.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\PingFix.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\RightClicker.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\BowBoost.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Misc\FastPlace.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Misc\FastBreak.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\AutoTool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\ChestStealer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\InvManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\BridgeAssist.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\BlockIn.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\Clutch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Misc\TickLocker.h">
@@ -264,7 +303,25 @@
     <ClInclude Include="src\Cheat\Modules\Misc\SnapTap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\Sprint.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\NoSlow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Misc\Strafe.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Visuals\Notifications.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Visuals\Pointers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Visuals\Indicators.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Visuals\NoHurtCam.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Combat\AutoRefill.h">
@@ -273,19 +330,37 @@
     <ClInclude Include="src\Cheat\Modules\Combat\Throw.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\Cheat\Modules\Combat\Piercing.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Combat\KeepSprint.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Combat\Criticals.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Combat\SprintReset.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Combat\LagRange.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Combat\Reach.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Combat\Blink.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Combat\AutoRod.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Cheat\Modules\Combat\AntiBot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Combat\AutoBlock.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Combat\Backtrack.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Cheat\Modules\Combat\AutoWeapon.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -345,6 +420,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Visuals\StorageEsp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Visuals\BlockEsp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Visuals\Nametag.cpp">
@@ -467,16 +545,52 @@
     <ClCompile Include="src\Cheat\Modules\Misc\Armorswitcher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\Weapons.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Misc\Friends.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Misc\Enemies.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\NoItemRelease.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\AntiDebuff.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\PingFix.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\RightClicker.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\BowBoost.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Misc\FastPlace.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Misc\FastBreak.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\AutoTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\ChestStealer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\InvManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\BridgeAssist.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\BlockIn.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\Clutch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Misc\TickLocker.cpp">
@@ -497,7 +611,25 @@
     <ClCompile Include="src\Cheat\Modules\Misc\SnapTap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\Sprint.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\NoSlow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Misc\Strafe.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Visuals\Notifications.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Visuals\Pointers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Visuals\Indicators.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Visuals\NoHurtCam.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Combat\AutoRefill.cpp">
@@ -506,19 +638,37 @@
     <ClCompile Include="src\Cheat\Modules\Combat\Throw.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Cheat\Modules\Combat\Piercing.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Combat\KeepSprint.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Combat\Criticals.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Combat\SprintReset.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Combat\LagRange.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Combat\Reach.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Combat\Blink.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Combat\AutoRod.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\Cheat\Modules\Combat\AntiBot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Combat\AutoBlock.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Combat\Backtrack.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Cheat\Modules\Combat\AutoWeapon.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

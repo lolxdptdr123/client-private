@@ -150,7 +150,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);d3d11.lib;dwmapi.lib;jvm.lib;winmm.lib;opengl32.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);d3d11.lib;dwmapi.lib;jvm.lib;winmm.lib;opengl32.lib;ws2_32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Users\bipbo\AppData\Local\Programs\Eclipse Adoptium\jdk-25.0.4.101-hotspot\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -165,11 +165,17 @@
     <ClInclude Include="src\Cheat\Modules\Combat\aimassist.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\AutoRefill.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\Throw.h" />
-    <ClInclude Include="src\Cheat\Modules\Combat\Piercing.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\KeepSprint.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\Criticals.h" />
+    <ClInclude Include="src\Cheat\Modules\Combat\SprintReset.h" />
+    <ClInclude Include="src\Cheat\Modules\Combat\LagRange.h" />
+    <ClInclude Include="src\Cheat\Modules\Combat\Reach.h" />
+    <ClInclude Include="src\Cheat\Modules\Combat\Blink.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\AutoRod.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\AntiBot.h" />
+    <ClInclude Include="src\Cheat\Modules\Combat\AutoBlock.h" />
+    <ClInclude Include="src\Cheat\Modules\Combat\Backtrack.h" />
+    <ClInclude Include="src\Cheat\Modules\Combat\AutoWeapon.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\clicker.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\JNIMemory.h" />
     <ClInclude Include="src\Cheat\Modules\Combat\SwordCheck.h" />
@@ -177,16 +183,31 @@
     <ClInclude Include="src\Cheat\Modules\Menu.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\armor.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\Armorswitcher.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\Weapons.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\Friends.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\Enemies.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\NoItemRelease.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\AntiDebuff.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\PingFix.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\RightClicker.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\BowBoost.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\FastPlace.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\FastBreak.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\AutoTool.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\ChestStealer.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\InvManager.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\BridgeAssist.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\BlockIn.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\Clutch.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\TickLocker.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\InvWalk.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\FastStop.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\NoJumpDelay.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\QuickAccel.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\SnapTap.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\Sprint.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\NoSlow.h" />
+    <ClInclude Include="src\Cheat\Modules\Misc\Strafe.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\Overlay.h" />
     <ClInclude Include="src\Cheat\Modules\Misc\Scroll.h" />
     <ClInclude Include="src\Cheat\Modules\Module.h" />
@@ -197,10 +218,14 @@
     <ClInclude Include="src\Cheat\Modules\Visuals\ItemEsp.h" />
     <ClInclude Include="src\Cheat\Modules\Visuals\PlayerEsp.h" />
     <ClInclude Include="src\Cheat\Modules\Visuals\StorageEsp.h" />
+    <ClInclude Include="src\Cheat\Modules\Visuals\BlockEsp.h" />
     <ClInclude Include="src\Cheat\Modules\Visuals\Nametag.h" />
     <ClInclude Include="src\Cheat\Modules\Visuals\Tracer.h" />
     <ClInclude Include="src\Cheat\Modules\Visuals\Trajectories.h" />
     <ClInclude Include="src\Cheat\Modules\Visuals\Notifications.h" />
+    <ClInclude Include="src\Cheat\Modules\Visuals\Pointers.h" />
+    <ClInclude Include="src\Cheat\Modules\Visuals\Indicators.h" />
+    <ClInclude Include="src\Cheat\Modules\Visuals\NoHurtCam.h" />
     <ClInclude Include="src\debuglog.h" />
     <ClInclude Include="src\Game\Classes\ActiveRenderInfo.h" />
     <ClInclude Include="src\Game\Classes\AxisAlignedBB.h" />
@@ -258,26 +283,47 @@
     <ClCompile Include="src\Cheat\Modules\Combat\aimassist.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\AutoRefill.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\Throw.cpp" />
-    <ClCompile Include="src\Cheat\Modules\Combat\Piercing.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\KeepSprint.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\Criticals.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Combat\SprintReset.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Combat\LagRange.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Combat\Reach.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Combat\Blink.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\AutoRod.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\AntiBot.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Combat\AutoBlock.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Combat\Backtrack.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Combat\AutoWeapon.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\clicker.cpp" />
     <ClCompile Include="src\Cheat\Modules\Combat\velocity.cpp" />
     <ClCompile Include="src\Cheat\Modules\Menu.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\armor.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\Armorswitcher.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\Weapons.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\Friends.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\Enemies.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\NoItemRelease.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\AntiDebuff.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\PingFix.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\RightClicker.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\BowBoost.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\FastPlace.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\FastBreak.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\AutoTool.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\ChestStealer.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\InvManager.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\BridgeAssist.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\BlockIn.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\Clutch.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\TickLocker.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\InvWalk.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\FastStop.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\NoJumpDelay.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\QuickAccel.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\SnapTap.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\Sprint.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\NoSlow.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Misc\Strafe.cpp" />
     <ClCompile Include="src\Cheat\Modules\Misc\Scroll.cpp" />
     <ClCompile Include="src\Cheat\Modules\Module.cpp" />
     <ClCompile Include="src\Cheat\Modules\Settings.cpp" />
@@ -287,10 +333,14 @@
     <ClCompile Include="src\Cheat\Modules\Visuals\ItemEsp.cpp" />
     <ClCompile Include="src\Cheat\Modules\Visuals\PlayerEsp.cpp" />
     <ClCompile Include="src\Cheat\Modules\Visuals\StorageEsp.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Visuals\BlockEsp.cpp" />
     <ClCompile Include="src\Cheat\Modules\Visuals\Nametag.cpp" />
     <ClCompile Include="src\Cheat\Modules\Visuals\Tracer.cpp" />
     <ClCompile Include="src\Cheat\Modules\Visuals\Trajectories.cpp" />
     <ClCompile Include="src\Cheat\Modules\Visuals\Notifications.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Visuals\Pointers.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Visuals\Indicators.cpp" />
+    <ClCompile Include="src\Cheat\Modules\Visuals\NoHurtCam.cpp" />
     <ClCompile Include="src\EntryPoint.cpp" />
     <ClCompile Include="src\Game\Classes\ActiveRenderInfo.cpp" />
     <ClCompile Include="src\Game\Classes\AxisAlignedBB.cpp" />

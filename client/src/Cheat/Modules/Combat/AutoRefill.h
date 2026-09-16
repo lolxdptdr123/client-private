@@ -5,7 +5,7 @@
 
 namespace AutoRefillSettings {
     inline int  mode = 0;       // 0 Blatant, 1 Legit, 2 Semi Blatant
-    inline int  itemMode = 0;   // 0 Potion, 1 Soup, 2 Both
+    inline int  itemMode = 2;   // 0 Potion, 1 Soup, 2 Both
     inline int  speed = 7;      // 0-10 (Whip: reelSpeed = 10 - speed)
     inline bool randomMode = false;
     inline bool dynamicSpeed = false;
@@ -32,4 +32,5 @@ public:
     }
 
     void Run(JNIEnv* env) override;
+    void OnRender(JNIEnv* env) override;
 };

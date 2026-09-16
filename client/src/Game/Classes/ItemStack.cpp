@@ -16,6 +16,22 @@ jobject ItemStack::GetItem(JNIEnv* env)
 	const auto itemStackClass = g_Instance->FindClass(Mapper::Get("net/minecraft/item/ItemStack"));
 	if (!itemStackClass)
 		return NULL;
+	std::string itemSig = Mapper::Get("net/minecraft/item/Item", 2);
+	std::string mappedField = Mapper::Get("item");
+
+	if (Mapper::IsCheatBreaker()) {
+		const char* fields[] = { mappedField.c_str(), "theItem", "item" };
+		for (const char* n : fields) {
+			if (!n || !n[0] || itemSig.empty()) continue;
+			Field* f = itemStackClass->GetField(env, n, itemSig.c_str());
+			if (env->ExceptionCheck()) { env->ExceptionClear(); f = nullptr; }
+			if (!f) continue;
+			jobject item = f->GetObjectField(env, (jobject)this, false);
+			if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
+			if (item) return item;
+		}
+	}
+
 	const auto getItemMethod = itemStackClass->GetMethod(env, Mapper::Get("getItem").data(), Mapper::Get("net/minecraft/item/Item", 3).data());
 	if (env->ExceptionCheck()) env->ExceptionClear();
 	if (getItemMethod) {
@@ -24,8 +40,6 @@ jobject ItemStack::GetItem(JNIEnv* env)
 		if (item) return item;
 	}
 
-	std::string itemSig = Mapper::Get("net/minecraft/item/Item", 2);
-	std::string mappedField = Mapper::Get("item");
 	const char* fields[] = { mappedField.c_str(), "theItem", "item" };
 	for (const char* n : fields) {
 		if (!n || !n[0] || itemSig.empty()) continue;
@@ -88,8 +102,17 @@ bool ItemStack::IsSoup(JNIEnv* env)
 	const auto heldItem = this->GetItem(env);
 	if (!heldItem) return false;
 	const auto klass = g_Instance->FindClass(Mapper::Get("net/minecraft/item/ItemSoup"));
-	if (!klass) return false;
-	return env->IsInstanceOf(heldItem, (jclass)klass);
+	if (klass && env->IsInstanceOf(heldItem, (jclass)klass)) return true;
+	return this->GetItemId(env) == 282;
+}
+
+bool ItemStack::IsEmpty(JNIEnv* env)
+{
+	if (this == NULL || !env) return true;
+	jobject item = this->GetItem(env);
+	if (!item) return true;
+	env->DeleteLocalRef(item);
+	return false;
 }
 
 bool ItemStack::IsRod(JNIEnv* env)
@@ -121,35 +144,45 @@ int ItemStack::GetMetadata(JNIEnv* env)
 		return 0;
 
 	int meta = 0;
+	bool got = false;
 	jclass cls = env->GetObjectClass((jobject)this);
 	if (!cls)
 		return 0;
 
 	auto tryField = [&](const char* name) {
-		if (!name || !name[0]) return;
+		if (got || !name || !name[0]) return;
 		jfieldID f = env->GetFieldID(cls, name, "I");
 		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
 		if (!f) return;
 		int v = env->GetIntField((jobject)this, f);
 		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
-		if (v) meta = v;
+		meta = v;
+		got = true;
 	};
 	auto tryMethod = [&](const char* name) {
-		if (!name || !name[0]) return;
+		if (got || !name || !name[0]) return;
 		jmethodID m = env->GetMethodID(cls, name, "()I");
 		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
 		if (!m) return;
 		int v = env->CallIntMethod((jobject)this, m);
 		if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
-		if (v) meta = v;
+		meta = v;
+		got = true;
 	};
 
-	tryMethod(Mapper::Get("getItemDamage").c_str());
-	tryMethod("getItemDamage");
-	tryMethod("getMetadata");
-	tryField(Mapper::Get("metadata").c_str());
-	tryField("itemDamage");
-	tryField("damage");
+	if (Mapper::IsCheatBreaker()) {
+		tryField(Mapper::Get("itemDamage").c_str());
+		tryField(Mapper::Get("metadata").c_str());
+		tryField("itemDamage");
+	} else {
+		tryMethod(Mapper::Get("getItemDamage").c_str());
+		tryMethod("getItemDamage");
+		tryMethod("getMetadata");
+		tryField(Mapper::Get("itemDamage").c_str());
+		tryField(Mapper::Get("metadata").c_str());
+		tryField("itemDamage");
+		tryField("damage");
+	}
 
 	env->DeleteLocalRef(cls);
 	return meta;
@@ -184,10 +217,30 @@ int ItemStack::GetItemId(JNIEnv* env)
 	if (!itemClass) { env->DeleteLocalRef(itemObj); return -1; }
 	std::string sig = "(" + Mapper::Get("net/minecraft/item/Item", 2) + ")I";
 	const auto m = itemClass->GetMethod(env, Mapper::Get("getIdFromItem").c_str(), sig.c_str(), true);
-	if (!m) { env->DeleteLocalRef(itemObj); return -1; }
-	int id = m->CallIntMethod(env, (jobject)itemClass, true, itemObj);
+	if (env->ExceptionCheck()) env->ExceptionClear();
+	if (m) {
+		int id = m->CallIntMethod(env, (jobject)itemClass, true, itemObj);
+		if (env->ExceptionCheck()) { env->ExceptionClear(); id = -1; }
+		if (id >= 0) {
+			env->DeleteLocalRef(itemObj);
+			return id;
+		}
+	}
+	jclass itemJc = env->GetObjectClass(itemObj);
+	int id = -1;
+	if (itemJc) {
+		const char* names[] = { "itemID", "id" };
+		for (const char* n : names) {
+			jfieldID f = env->GetFieldID(itemJc, n, "I");
+			if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
+			if (!f) continue;
+			id = env->GetIntField(itemObj, f);
+			if (env->ExceptionCheck()) { env->ExceptionClear(); id = -1; continue; }
+			break;
+		}
+		env->DeleteLocalRef(itemJc);
+	}
 	env->DeleteLocalRef(itemObj);
-	if (env->ExceptionCheck()) { env->ExceptionClear(); return -1; }
 	return id;
 }
 

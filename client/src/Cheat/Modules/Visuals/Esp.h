@@ -5,8 +5,8 @@
 
 namespace EspSettings {
     inline int   renderMode = 2;   // 0 2D, 1 3D, 2 Both
-    inline int   mode3d = 2;       // 0 Outline, 1 Fill, 2 Both
-    inline int   mode2d = 2;
+    inline int   mode3d = 0;       // 0 Outline, 1 Fill, 2 Both
+    inline int   mode2d = 0;
 
     inline bool  showHealthBar = true;
     inline bool  hideFriends = false;

@@ -20,6 +20,10 @@ public:
 	static int GetDisplayWidth(JNIEnv* env);
 	static bool IsFullscreen(JNIEnv* env);
 	static jobject WindowClick(JNIEnv* env, int windowId, int slot, int mouseButton, int clickMode, jobject player);
+	static bool OpenPlayerInventory(JNIEnv* env);
+	static void ClosePlayerInventory(JNIEnv* env);
+	static bool IsPlayerInventoryScreen(JNIEnv* env);
+	static void PressInventoryKey(JNIEnv* env);
 	static void RightClickMouse(JNIEnv* env);
 	static int GetRightClickDelayTimer(JNIEnv* env);
 	static void SetRightClickDelayTimer(JNIEnv* env, int ticks);

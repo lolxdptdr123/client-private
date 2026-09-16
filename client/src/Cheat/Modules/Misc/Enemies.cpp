@@ -25,7 +25,27 @@ struct EnemyEntry {
 static std::mutex s_mu;
 static std::vector<EnemyEntry> s_enemies;
 
+static std::string StripMc(std::string s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xA7) {
+            i += (i + 2 < s.size()) ? 3 : 2;
+            continue;
+        }
+        if (c == 0xA7 || s[i] == '&') {
+            i += (i + 1 < s.size()) ? 2 : 1;
+            continue;
+        }
+        out.push_back(s[i]);
+        i++;
+    }
+    return out;
+}
+
 static std::string Lower(std::string s) {
+    s = StripMc(std::move(s));
     for (char& c : s) c = (char)tolower((unsigned char)c);
     return s;
 }
@@ -43,6 +63,8 @@ static EnemyEntry MakeEntry(JNIEnv* env, Player* p) {
     JniOk(env);
     e.name = p->GetName(env, true);
     JniOk(env);
+    if (e.name.empty())
+        e.name = p->GetName(env, false);
     return e;
 }
 
@@ -255,12 +277,31 @@ void EnemiesModule::Run(JNIEnv* env) {
         nearbyWas = false;
     }
 
-    if (EnemiesSettings::addEnemyKey != 0 && s_playerCls) {
+    if (EnemiesSettings::addEnemyKey != 0) {
         bool down = (GetAsyncKeyState(EnemiesSettings::addEnemyKey) & 0x8000) != 0;
         if (down && !addWas) {
             jobject pointed = Minecraft::GetPointedEntity(env);
             JniOk(env);
-            if (pointed && env->IsInstanceOf(pointed, s_playerCls)) {
+            if (!pointed) {
+                jobject mop = Minecraft::GetObjectMouseOver(env);
+                JniOk(env);
+                if (mop) {
+                    jclass mc = env->GetObjectClass(mop);
+                    std::string eh = Mapper::Get("entityHit");
+                    std::string es = Mapper::Get("net/minecraft/entity/Entity", 2);
+                    jfieldID fid = nullptr;
+                    if (mc && !eh.empty() && !es.empty())
+                        fid = env->GetFieldID(mc, eh.c_str(), es.c_str());
+                    JniOk(env);
+                    if (fid) pointed = env->GetObjectField(mop, fid);
+                    JniOk(env);
+                    if (mc) env->DeleteLocalRef(mc);
+                    env->DeleteLocalRef(mop);
+                }
+            }
+            bool isPlayer = pointed && (!s_playerCls || env->IsInstanceOf(pointed, s_playerCls));
+            JniOk(env);
+            if (isPlayer) {
                 auto* ent = (Player*)pointed;
                 if (ent->GetEntityId(env) != local->GetEntityId(env)) {
                     if (EnemiesSettings::IsEnemy(env, ent)) {

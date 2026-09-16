@@ -7,6 +7,8 @@
 #include "../Modules/Module.h"
 #include "../Modules/Settings.h"
 #include "../Modules/Misc/Overlay.h"
+#include "../Modules/Menu.h"
+#include "../../Game/Classes/Minecraft.h"
 
 #include "../../Helper/Communication.h"
 #include "../../Helper/Utils.h"
@@ -75,24 +77,29 @@ static ImGuiKey VKToImGuiKey(WPARAM vk) {
 static LRESULT WINAPI HookedWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (Overlay::isOpen) {
         ImGuiIO& io = ImGui::GetIO();
+        const bool block = !GuiSettings::allowInput;
         switch (msg) {
         case WM_MOUSEWHEEL:
             io.AddMouseWheelEvent(0.0f, (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA);
-            return 0;
+            if (block) return 0;
+            break;
         case WM_MOUSEHWHEEL:
             io.AddMouseWheelEvent((float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA, 0.0f);
-            return 0;
+            if (block) return 0;
+            break;
         case WM_CHAR:
             if (wParam > 0 && wParam < 0x10000)
                 io.AddInputCharacterUTF16((ImWchar16)wParam);
-            return 0;
+            if (block) return 0;
+            break;
         case WM_KEYDOWN: case WM_SYSKEYDOWN: {
             io.AddKeyEvent(ImGuiMod_Ctrl, (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
             io.AddKeyEvent(ImGuiMod_Shift, (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
             io.AddKeyEvent(ImGuiMod_Alt, (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
             ImGuiKey k = VKToImGuiKey(wParam);
             if (k != ImGuiKey_None) io.AddKeyEvent(k, true);
-            return 0;
+            if (block) return 0;
+            break;
         }
         case WM_KEYUP: case WM_SYSKEYUP: {
             io.AddKeyEvent(ImGuiMod_Ctrl, (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
@@ -100,12 +107,15 @@ static LRESULT WINAPI HookedWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
             io.AddKeyEvent(ImGuiMod_Alt, (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
             ImGuiKey k = VKToImGuiKey(wParam);
             if (k != ImGuiKey_None) io.AddKeyEvent(k, false);
-            return 0;
+            if (block) return 0;
+            break;
         }
         case WM_LBUTTONDOWN: case WM_LBUTTONUP:
         case WM_RBUTTONDOWN: case WM_RBUTTONUP:
         case WM_MBUTTONDOWN: case WM_MBUTTONUP:
-        case WM_MOUSEMOVE:   return 0;
+        case WM_MOUSEMOVE:
+            if (block) return 0;
+            break;
         }
     }
     return CallWindowProcW(g_origWndProc, hWnd, msg, wParam, lParam);
@@ -202,6 +212,11 @@ bool __stdcall wglSwapBuffersHook(HDC hdc)
             }
         }
         if (env && env->ExceptionCheck()) env->ExceptionClear();
+        if (env) {
+            jobject screenObj = Minecraft::GetCurrentScreen(env);
+            g_playerInGame.store(screenObj == nullptr);
+            if (screenObj) env->DeleteLocalRef(screenObj);
+        }
         for (const auto& mod : Modules::GetRegisteredModules())
             mod->OnRender(env);
 
