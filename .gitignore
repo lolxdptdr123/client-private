@@ -39,3 +39,4 @@ x64/
 *.snk
 credentials.json
 *.wbin
+website/.admin-password

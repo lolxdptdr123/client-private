@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Helix</title>
+    <meta name="description" content="Helix — Minecraft 1.7.10 & 1.8.9 ghost client landing page." />
+    <meta name="theme-color" content="#3B9EFF" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="nav-wrap" data-nav="home"></div>
+    <div class="spacer"></div>
+    <main id="main">
+      <header class="hero">
+        <p class="kicker">Minecraft 1.7.10 / 1.8.9</p>
+        <h1 class="wordmark">Helix</h1>
+        <p class="tagline">A compact ghost client with 50+ modules. Tune it quiet or loud — you keep the controls.</p>
+        <div class="hero-actions">
+          <a class="btn btn-accent" href="purchase.html">Get started</a>
+          <a class="btn btn-ghost" href="docs.html">Browse modules</a>
+        </div>
+      </header>
+
+      <div class="page">
+        <section class="feature">
+          <div class="panel panel-fade settings">
+            <div class="settings-row">
+              <div>
+                <span class="title">Piercing</span>
+                <span class="badge">NONE</span>
+                <p class="hint">Allows hitting entities through obstructions.</p>
+              </div>
+              <button class="toggle" data-toggle aria-label="Toggle piercing"></button>
+            </div>
+            <label class="check"><input type="checkbox" /> Always hit through</label>
+            <div class="settings-row">
+              <span>Sort targets by</span>
+              <select class="select">
+                <option>Hurt time</option>
+                <option>Distance</option>
+                <option>Health</option>
+              </select>
+            </div>
+            <p class="sub">Filters</p>
+            <div class="settings-row">Non-player entities <button class="toggle on" data-toggle></button></div>
+            <div class="settings-row">Friendlies <button class="toggle on" data-toggle></button></div>
+            <div class="settings-row">Bots <button class="toggle on" data-toggle></button></div>
+            <div class="settings-row">Enemies <button class="toggle on" data-toggle></button></div>
+          </div>
+          <div>
+            <h2>Packed, not noisy</h2>
+            <p>
+              Helix is a Minecraft ghost client. Including <span class="accent">50+</span> modules, it
+              covers combat, movement, visuals and utility — whatever gamemode you're playing.
+            </p>
+            <a class="link-accent" href="docs.html">View modules</a>
+          </div>
+        </section>
+
+        <section class="feature reverse">
+          <div class="panel terminal">
+            <div class="term-bar">
+              <div class="dots"><span></span><span></span><span></span></div>
+              .helix-loader
+            </div>
+            <div class="term-body">
+              <pre class="ascii">    __  __     ___
+   / / / /__  / (_)  __
+  / /_/ / _ \/ / / |/_/
+ / __  /  __/ / />  <
+/_/ /_/\___/_/_/_/|_|</pre>
+              <div class="ok">&gt; READY</div>
+              <div class="dim">Waiting for Minecraft 1.8.9…</div>
+            </div>
+          </div>
+          <div>
+            <h2>Drops in cleanly</h2>
+            <p>
+              Helix works with Minecraft <span class="accent">1.7.10</span> and
+              <span class="accent">1.8.9</span>. Supports Vanilla, Forge and Lunar<sup>1</sup>.
+            </p>
+            <a class="link-accent" href="requirements.html">System requirements</a>
+            <p class="note">
+              <sup>1</sup> Third party clients without official mod support can always break compatibility in the future.
+            </p>
+          </div>
+        </section>
+
+        <section class="feature">
+          <div class="panel profiles panel-fade">
+            <div class="tabs">
+              <span>Combat</span><span>Move</span><span>Visual</span><span>Utility</span>
+              <span class="on">Profiles</span><span class="warn">Unload</span>
+            </div>
+            <div class="profile">
+              <div>
+                <strong>Default</strong>
+                <small>Contains the default configuration.</small>
+              </div>
+              <span class="lock">🔒</span>
+              <span class="trash">🗑</span>
+            </div>
+            <div class="profile">
+              <div>
+                <strong>HypixelBlatant <span class="badge">HYPE</span></strong>
+                <small>Used today</small>
+              </div>
+              <span class="lock">🔒</span>
+              <span class="trash">🗑</span>
+            </div>
+            <div class="profile">
+              <div>
+                <strong>HypixelLegit <span class="badge">HYPE</span></strong>
+                <small>Used today</small>
+              </div>
+              <span class="lock">🔒</span>
+              <span class="trash">🗑</span>
+            </div>
+          </div>
+          <div>
+            <h2>As subtle as you set it</h2>
+            <p>
+              Configure Helix to be as subtle or as obvious as you want. Save presets, share them, or
+              generate a starting profile in the browser.
+            </p>
+            <a class="link-accent" href="profiles.html">Generate a profile</a>
+          </div>
+        </section>
+        <hr class="sep" />
+      </div>
+    </main>
+    <div data-footer></div>
+    <script src="js/app.js"></script>
+  </body>
+</html>

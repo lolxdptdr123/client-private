@@ -1,0 +1,26 @@
+[
+  {
+    "id": "d4c640df-a767-4f95-98ff-5c51561fc254",
+    "date": "2026-09-16",
+    "version": "test zxom",
+    "body": "goat kho"
+  },
+  {
+    "id": "2.4.1",
+    "date": "2026-09-12",
+    "version": "2.4.1",
+    "body": "Menu polish, profile import fixes, Lunar 1.8.9 attach reliability."
+  },
+  {
+    "id": "2.4.0",
+    "date": "2026-08-02",
+    "version": "2.4.0",
+    "body": "New visuals pack, arraylist theming, and a quieter default profile."
+  },
+  {
+    "id": "2.3.0",
+    "date": "2026-06-18",
+    "version": "2.3.0",
+    "body": "Forge 1.7.10 support improvements and config backup on unload."
+  }
+]
